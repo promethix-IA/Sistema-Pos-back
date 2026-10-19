@@ -19,3 +19,7 @@ class UserRepository(ABC):
     @abstractmethod
     def count(self) -> int:
         raise NotImplementedError
+
+    @abstractmethod
+    def all(self) -> list[User]:
+        raise NotImplementedError

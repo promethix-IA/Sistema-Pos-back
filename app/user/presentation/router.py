@@ -25,6 +25,14 @@ def get_user_repository(session: Session = Depends(get_db)) -> UserRepository:
     return UserRepositoryImpl(session)
 
 
+@router.get("", response_model=list[UserResponseSchema])
+def list_users(
+    repository: UserRepository = Depends(get_user_repository),
+    _current_user: User = Depends(get_current_user),
+) -> list[UserResponseSchema]:
+    return [UserResponseSchema.from_entity(user) for user in repository.all()]
+
+
 @router.post("", response_model=UserResponseSchema, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: UserCreateSchema,

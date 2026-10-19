@@ -30,6 +30,10 @@ class UserRepositoryImpl(UserRepository):
         stmt = select(func.count()).select_from(UserModel)
         return int(self.session.scalar(stmt) or 0)
 
+    def all(self) -> list[User]:
+        stmt = select(UserModel).order_by(UserModel.created_at.desc(), UserModel.id.desc())
+        return [self._to_entity(model) for model in self.session.scalars(stmt)]
+
     def _to_entity(self, model: UserModel) -> User:
         return User(
             id=model.id,
