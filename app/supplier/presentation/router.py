@@ -20,6 +20,8 @@ class OrderIn(BaseModel):
     product: str = Field(min_length=1, max_length=200)
     qty: float = Field(gt=0)
     unitPrice: float = Field(ge=0)
+    invoice: str = ""
+    productId: int | None = None
 
 
 def get_repository(session: Session = Depends(get_db)) -> SupplierRepository:

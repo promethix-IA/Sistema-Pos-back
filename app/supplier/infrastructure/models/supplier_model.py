@@ -24,3 +24,5 @@ class SupplierOrderModel(Base):
     qty = Column(Numeric(12, 3), nullable=False)
     unit_price = Column(Numeric(14, 2), nullable=False)
     price = Column(Numeric(14, 2), nullable=False)
+    invoice = Column(String(80), nullable=False, default="")
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)

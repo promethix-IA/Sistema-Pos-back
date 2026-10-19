@@ -17,6 +17,7 @@ class ProductIn(BaseModel):
     buyPrice: float = Field(ge=0)
     sellPrice: float = Field(ge=0)
     stock: int = Field(ge=0)
+    entryType: str = "ENTRADA_INICIAL"
 
 
 class ProductPatch(BaseModel):

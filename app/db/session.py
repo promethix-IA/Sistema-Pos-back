@@ -1,5 +1,6 @@
 import time
 
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from db.database import Base, SessionLocal, engine
@@ -14,7 +15,9 @@ def get_db():
 
 
 def init_db():
+    from category.infrastructure.models.category_model import CategoryModel  # noqa: F401
     from client.infrastructure.models.client_model import ClientModel, ClientPurchaseModel  # noqa: F401
+    from inventory.infrastructure.models.movement_model import InventoryMovementModel  # noqa: F401
     from integration.infrastructure.models.integration_model import (  # noqa: F401
         DianSettingModel,
         PeripheralModel,
@@ -28,6 +31,20 @@ def init_db():
     for attempt in range(10):
         try:
             Base.metadata.create_all(bind=engine)
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "ALTER TABLE supplier_orders ADD COLUMN IF NOT EXISTS invoice VARCHAR(80) NOT NULL DEFAULT ''"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE supplier_orders ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id) ON DELETE SET NULL"
+                ))
+            from inventory.infrastructure.repositories.inventory_repository import seed_movements
+
+            session = SessionLocal()
+            try:
+                seed_movements(session)
+            finally:
+                session.close()
             return
         except OperationalError:
             if attempt == 9:

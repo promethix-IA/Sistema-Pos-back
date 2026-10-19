@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from inventory.infrastructure.repositories.inventory_repository import record_movement
 from product.infrastructure.models.product_model import ProductModel
 from shared.clock import money, now_bogota, whole
 from shared.exceptions import NotFoundError
@@ -36,22 +37,45 @@ class SupplierRepository:
             raise NotFoundError("Proveedor no encontrado")
         qty = data["qty"]
         unit_price = data["unitPrice"]
+        current = now_bogota()
+        invoice = (data.get("invoice") or "").strip()
         order = SupplierOrderModel(
             supplier_id=supplier.id,
-            ordered_on=now_bogota().date(),
+            ordered_on=current.date(),
             product=data["product"].strip(),
             qty=qty,
             unit_price=unit_price,
             price=qty * unit_price,
+            invoice=invoice,
+            product_id=data.get("productId"),
         )
         self.session.add(order)
-        fragment = data["product"].strip().lower()
-        products = self.session.scalars(select(ProductModel)).all()
         added = whole(qty)
-        for product in products:
-            if fragment and fragment in product.name.lower():
-                product.stock += added
-                product.updated_at = now_bogota()
+        if data.get("productId"):
+            chosen = self.session.get(ProductModel, data["productId"])
+            if chosen is None:
+                raise NotFoundError("Producto no encontrado")
+            targets = [chosen]
+        else:
+            fragment = data["product"].strip().lower()
+            targets = [
+                product
+                for product in self.session.scalars(select(ProductModel)).all()
+                if fragment and fragment in product.name.lower()
+            ]
+        for product in targets:
+            product.stock += added
+            product.buy_price = unit_price
+            product.updated_at = current
+            record_movement(
+                self.session,
+                product,
+                "ENTRADA_COMPRA",
+                added,
+                f"Factura {invoice} · {supplier.name}" if invoice else f"Compra {product.name}",
+                invoice,
+                current,
+            )
         supplier.updated_at = now_bogota()
         self.session.commit()
         return self._supplier_dict(supplier.id)
@@ -78,6 +102,8 @@ class SupplierRepository:
                     "qty": money(order.qty),
                     "unitPrice": money(order.unit_price),
                     "price": money(order.price),
+                    "productId": order.product_id,
+                    "invoice": order.invoice or "",
                 }
             )
         return grouped

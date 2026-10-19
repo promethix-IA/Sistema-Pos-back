@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from client.infrastructure.models.client_model import ClientModel, ClientPurchaseModel
+from inventory.infrastructure.repositories.inventory_repository import record_movement
 from product.infrastructure.models.product_model import ProductModel
 from product.infrastructure.repositories.product_repository import to_product
 from sale.infrastructure.models.sale_model import SaleItemModel, SaleModel
@@ -62,6 +63,15 @@ class SaleRepository:
         for product, qty, weight, line_total in line_totals:
             product.stock = max(0, product.stock - math.ceil(qty))
             product.updated_at = current
+            record_movement(
+                self.session,
+                product,
+                "SALIDA_VENTA",
+                -math.ceil(qty),
+                f"Venta {sale.ticket}",
+                sale.ticket,
+                current,
+            )
             self.session.add(
                 SaleItemModel(
                     sale_id=sale.id,

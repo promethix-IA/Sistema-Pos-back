@@ -3,7 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from category.presentation.router import router as category_router
 from client.presentation.router import router as client_router
+from inventory.presentation.router import router as inventory_router
 from db.session import init_db
 from integration.presentation.router import router as integration_router
 from product.presentation.router import router as product_router
@@ -22,7 +24,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="Sistema POS",
     version="0.1.0",
-    description="API del POS: usuarios, productos, clientes, proveedores, ventas e integraciones.",
+    description="API del POS: usuarios, productos, inventario, clientes, proveedores, ventas e integraciones.",
     lifespan=lifespan,
 )
 
@@ -41,6 +43,8 @@ app.add_middleware(
 app.include_router(user_router)
 protected = [Depends(get_current_user)]
 app.include_router(product_router, dependencies=protected)
+app.include_router(category_router, dependencies=protected)
+app.include_router(inventory_router, dependencies=protected)
 app.include_router(client_router, dependencies=protected)
 app.include_router(supplier_router, dependencies=protected)
 app.include_router(sale_router, dependencies=protected)

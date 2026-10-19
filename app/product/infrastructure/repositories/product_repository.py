@@ -1,6 +1,8 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from category.infrastructure.repositories.category_repository import ensure_category
+from inventory.infrastructure.repositories.inventory_repository import record_movement
 from product.infrastructure.models.product_model import ProductModel
 from shared.clock import money, now_bogota
 from shared.exceptions import ConflictError, NotFoundError
@@ -34,6 +36,15 @@ class ProductRepository:
             updated_at=current,
         )
         self.session.add(model)
+        self.session.flush()
+        ensure_category(self.session, model.category)
+        entry_type = data.get("entryType") or "ENTRADA_INICIAL"
+        if entry_type not in {"ENTRADA_INICIAL", "IMPORTACION"}:
+            entry_type = "ENTRADA_INICIAL"
+        if model.stock:
+            note = "Importación masiva CSV" if entry_type == "IMPORTACION" else "Stock inicial al crear producto"
+            ref = "IMP" if entry_type == "IMPORTACION" else "INI"
+            record_movement(self.session, model, entry_type, model.stock, note, ref)
         self.session.commit()
         self.session.refresh(model)
         return model
@@ -47,6 +58,7 @@ class ProductRepository:
             model.name = data["name"].strip()
         if "category" in data:
             model.category = data["category"].strip() or "Sin categoría"
+            ensure_category(self.session, model.category)
         if "buyPrice" in data:
             model.buy_price = data["buyPrice"]
         if "sellPrice" in data:
