@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from client.presentation.router import router as client_router
 from db.session import init_db
@@ -23,6 +24,18 @@ app = FastAPI(
     version="0.1.0",
     description="API del POS: usuarios, productos, clientes, proveedores, ventas e integraciones.",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://promethixiafront.netlify.app",
+        "http://localhost:8443",
+        "http://127.0.0.1:8443",
+    ],
+    allow_origin_regex=r"https://.*\.netlify\.app",
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(user_router)
