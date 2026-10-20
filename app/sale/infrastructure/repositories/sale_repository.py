@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -10,7 +10,7 @@ from inventory.infrastructure.repositories.inventory_repository import record_mo
 from product.infrastructure.models.product_model import ProductModel
 from product.infrastructure.repositories.product_repository import to_product
 from sale.infrastructure.models.sale_model import SaleItemModel, SaleModel
-from shared.clock import money, now_bogota, qty
+from shared.clock import BOGOTA, money, now_bogota, qty
 from shared.exceptions import NotFoundError, ValidationError
 
 WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
@@ -56,6 +56,7 @@ class SaleRepository:
             client_id=data.get("clientId"),
             payment=data["payment"],
             total=total,
+            status="completed",
             sold_at=current,
         )
         if sale.client_id is not None and self.session.get(ClientModel, sale.client_id) is None:
@@ -84,6 +85,7 @@ class SaleRepository:
                     product_id=product.id,
                     product_name=product.name,
                     qty=amount,
+                    cancelled_qty=0,
                     weight=weight,
                     unit_price=product.sell_price,
                     line_total=line_total,
@@ -114,6 +116,167 @@ class SaleRepository:
             "payment": sale.payment,
             "soldAt": sale.sold_at.isoformat(),
             "store": "Tienda Central",
+        }
+
+    def list_by_date(self, day: date) -> list[dict]:
+        start = datetime.combine(day, time.min, tzinfo=BOGOTA)
+        end = start + timedelta(days=1)
+        sales = list(
+            self.session.scalars(
+                select(SaleModel)
+                .where(SaleModel.sold_at >= start, SaleModel.sold_at < end)
+                .order_by(SaleModel.sold_at.desc(), SaleModel.id.desc())
+            ).all()
+        )
+        return [self._to_sale_detail(sale) for sale in sales]
+
+    def cancel_sale(self, sale_id: int, reason: str = "") -> dict:
+        sale = self._get_sale(sale_id)
+        items = self._items_for(sale_id)
+        returns = []
+        for item in items:
+            remaining = qty(item.qty) - qty(item.cancelled_qty)
+            if remaining > 0:
+                returns.append({"itemId": item.id, "qty": remaining})
+        if not returns:
+            raise ValidationError("La venta ya está completamente cancelada")
+        return self._apply_returns(sale, items, returns, reason or "Cancelación total de la venta")
+
+    def return_items(self, sale_id: int, data: dict) -> dict:
+        sale = self._get_sale(sale_id)
+        items = self._items_for(sale_id)
+        returns = data.get("items") or []
+        if not returns:
+            raise ValidationError("Indica al menos un producto a devolver")
+        reason = (data.get("reason") or "").strip() or "Devolución parcial"
+        return self._apply_returns(sale, items, returns, reason)
+
+    def _apply_returns(
+        self,
+        sale: SaleModel,
+        items: list[SaleItemModel],
+        returns: list[dict],
+        reason: str,
+    ) -> dict:
+        if (sale.status or "completed") == "cancelled":
+            raise ValidationError("La venta ya está cancelada")
+
+        by_id = {item.id: item for item in items}
+        current = now_bogota()
+        refunded = 0.0
+        product_ids = [item.product_id for item in items if item.product_id]
+        products = {
+            product.id: product
+            for product in self.session.scalars(select(ProductModel).where(ProductModel.id.in_(product_ids))).all()
+        } if product_ids else {}
+
+        for entry in returns:
+            item = by_id.get(int(entry["itemId"]))
+            if item is None:
+                raise NotFoundError("Producto de la venta no encontrado")
+            amount = qty(entry["qty"])
+            if amount <= 0:
+                raise ValidationError("La cantidad a devolver debe ser mayor a 0")
+            remaining = qty(qty(item.qty) - qty(item.cancelled_qty))
+            if amount > remaining:
+                raise ValidationError(f"Solo puedes devolver hasta {remaining:g} de {item.product_name}")
+
+            item.cancelled_qty = qty(qty(item.cancelled_qty) + amount)
+            unit = money(item.unit_price)
+            refunded = round(refunded + unit * amount, 2)
+            item.line_total = money(unit * (qty(item.qty) - qty(item.cancelled_qty)))
+
+            product = products.get(item.product_id) if item.product_id else None
+            if product is not None:
+                tracks = bool(getattr(product, "tracks_inventory", True))
+                sale_mode = (getattr(product, "sale_mode", None) or "unidad").strip().lower()
+                if sale_mode == "unidad":
+                    tracks = True
+                if tracks:
+                    product.stock = qty(product.stock) + amount
+                    product.updated_at = current
+                    record_movement(
+                        self.session,
+                        product,
+                        "ENTRADA_DEVOLUCION",
+                        amount,
+                        f"{reason} · {sale.ticket}",
+                        sale.ticket,
+                        current,
+                    )
+
+        sale.total = money(max(0, money(sale.total) - refunded))
+        sale.status = self._status_from_items(items)
+
+        if sale.client_id is not None and refunded:
+            client = self.session.get(ClientModel, sale.client_id)
+            if client is not None:
+                client.total_bought = max(0, money(client.total_bought) - refunded)
+                client.updated_at = current
+
+        self.session.commit()
+        self.session.refresh(sale)
+        detail = self._to_sale_detail(sale)
+        detail["refunded"] = refunded
+        return detail
+
+    def _get_sale(self, sale_id: int) -> SaleModel:
+        sale = self.session.get(SaleModel, sale_id)
+        if sale is None:
+            raise NotFoundError("Venta no encontrada")
+        return sale
+
+    def _items_for(self, sale_id: int) -> list[SaleItemModel]:
+        return list(
+            self.session.scalars(
+                select(SaleItemModel).where(SaleItemModel.sale_id == sale_id).order_by(SaleItemModel.id.asc())
+            ).all()
+        )
+
+    def _status_from_items(self, items: list[SaleItemModel]) -> str:
+        if not items:
+            return "cancelled"
+        all_cancelled = all(qty(item.cancelled_qty) >= qty(item.qty) for item in items)
+        if all_cancelled:
+            return "cancelled"
+        any_cancelled = any(qty(item.cancelled_qty) > 0 for item in items)
+        return "partially_cancelled" if any_cancelled else "completed"
+
+    def _to_sale_detail(self, sale: SaleModel) -> dict:
+        items = self._items_for(sale.id)
+        client_name = None
+        if sale.client_id is not None:
+            client = self.session.get(ClientModel, sale.client_id)
+            client_name = client.name if client is not None else None
+        mapped = []
+        for item in items:
+            sold = qty(item.qty)
+            cancelled = qty(item.cancelled_qty)
+            active = qty(sold - cancelled)
+            unit = money(item.unit_price)
+            mapped.append(
+                {
+                    "id": item.id,
+                    "productId": item.product_id,
+                    "productName": item.product_name,
+                    "qty": sold,
+                    "cancelledQty": cancelled,
+                    "activeQty": active,
+                    "weight": qty(item.weight) if item.weight is not None else None,
+                    "unitPrice": unit,
+                    "lineTotal": money(unit * active),
+                }
+            )
+        return {
+            "id": sale.id,
+            "ticket": sale.ticket,
+            "clientId": sale.client_id,
+            "clientName": client_name,
+            "payment": sale.payment,
+            "total": money(sale.total),
+            "status": sale.status or "completed",
+            "soldAt": sale.sold_at.isoformat(),
+            "items": mapped,
         }
 
     def dashboard(self) -> dict:
@@ -158,7 +321,9 @@ class SaleRepository:
         items = self.session.scalars(select(SaleItemModel)).all()
         for item in items:
             if item.product_id:
-                qty_by_product[item.product_id] += float(item.qty)
+                active = qty(item.qty) - qty(getattr(item, "cancelled_qty", 0) or 0)
+                if active > 0:
+                    qty_by_product[item.product_id] += active
         products = list(self.session.scalars(select(ProductModel)).all())
         if qty_by_product:
             ranked = sorted(products, key=lambda product: qty_by_product.get(product.id, 0), reverse=True)

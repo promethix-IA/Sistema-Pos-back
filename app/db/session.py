@@ -50,6 +50,12 @@ def init_db():
                 connection.execute(text(
                     "ALTER TABLE inventory_movements ALTER COLUMN balance_after TYPE NUMERIC(14, 3) USING balance_after::numeric"
                 ))
+                connection.execute(text(
+                    "ALTER TABLE sales ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'completed'"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS cancelled_qty NUMERIC(12, 3) NOT NULL DEFAULT 0"
+                ))
             from inventory.infrastructure.repositories.inventory_repository import seed_movements
 
             session = SessionLocal()
