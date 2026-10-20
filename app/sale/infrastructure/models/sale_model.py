@@ -9,8 +9,13 @@ class SaleModel(Base):
     id = Column(Integer, primary_key=True)
     ticket = Column(String(40), nullable=False, unique=True)
     client_id = Column(Integer, ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
+    shift_id = Column(Integer, ForeignKey("cash_shifts.id", ondelete="SET NULL"), nullable=True)
     payment = Column(String(20), nullable=False)
     total = Column(Numeric(14, 2), nullable=False)
+    amount_efectivo = Column(Numeric(14, 2), nullable=False, default=0)
+    amount_tarjeta = Column(Numeric(14, 2), nullable=False, default=0)
+    amount_transferencia = Column(Numeric(14, 2), nullable=False, default=0)
+    amount_credito = Column(Numeric(14, 2), nullable=False, default=0)
     status = Column(String(30), nullable=False, default="completed")
     sold_at = Column(DateTime(timezone=True), nullable=False)
 

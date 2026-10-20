@@ -6,15 +6,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from client.infrastructure.models.client_model import ClientModel, ClientPurchaseModel
+from credit.infrastructure.repositories.credit_repository import CreditRepository
 from inventory.infrastructure.repositories.inventory_repository import record_movement
 from product.infrastructure.models.product_model import ProductModel
 from product.infrastructure.repositories.product_repository import to_product
 from sale.infrastructure.models.sale_model import SaleItemModel, SaleModel
 from shared.clock import BOGOTA, money, now_bogota, qty
 from shared.exceptions import NotFoundError, ValidationError
+from shift.infrastructure.models.shift_model import CashShiftModel
 
 WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+PAYMENT_METHODS = {"efectivo", "tarjeta", "transferencia", "credito", "mixto"}
 
 
 class SaleRepository:
@@ -22,10 +25,17 @@ class SaleRepository:
         self.session = session
 
     def confirm(self, data: dict) -> dict:
-        if data["payment"] not in {"efectivo", "tarjeta"}:
-            raise ValidationError("El método de pago debe ser efectivo o tarjeta")
+        payment = (data.get("payment") or "").strip().lower()
+        if payment not in PAYMENT_METHODS:
+            raise ValidationError("Método de pago inválido")
         if not data["items"]:
             raise ValidationError("El carrito está vacío")
+
+        shift = self.session.scalars(
+            select(CashShiftModel).where(CashShiftModel.status == "open").order_by(CashShiftModel.id.desc())
+        ).first()
+        if shift is None:
+            raise ValidationError("Debes abrir un turno en Cierre de caja antes de vender")
 
         current = now_bogota()
         product_ids = [item["productId"] for item in data["items"]]
@@ -51,16 +61,26 @@ class SaleRepository:
             line_totals.append((product, amount, weight, tracks, money(product.sell_price) * amount))
 
         total = round(sum(line[4] for line in line_totals), 2)
+        amounts = _payment_breakdown(payment, total, data)
+        client_id = data.get("clientId")
+        if amounts["credito"] > 0 and not client_id:
+            raise ValidationError("Las ventas a crédito requieren un cliente")
+        if client_id is not None and self.session.get(ClientModel, client_id) is None:
+            raise NotFoundError("Cliente no encontrado")
+
         sale = SaleModel(
             ticket=f"TMP-{uuid4().hex[:12]}",
-            client_id=data.get("clientId"),
-            payment=data["payment"],
+            client_id=client_id,
+            shift_id=shift.id,
+            payment=payment,
             total=total,
+            amount_efectivo=amounts["efectivo"],
+            amount_tarjeta=amounts["tarjeta"],
+            amount_transferencia=amounts["transferencia"],
+            amount_credito=amounts["credito"],
             status="completed",
             sold_at=current,
         )
-        if sale.client_id is not None and self.session.get(ClientModel, sale.client_id) is None:
-            raise NotFoundError("Cliente no encontrado")
         self.session.add(sale)
         self.session.flush()
         sale.ticket = f"VTA-{sale.id:06d}"
@@ -107,6 +127,11 @@ class SaleRepository:
                 )
             )
 
+        if amounts["credito"] > 0:
+            CreditRepository(self.session).create_from_sale(
+                sale.id, int(sale.client_id), sale.ticket, amounts["credito"]
+            )
+
         self.session.commit()
         self.session.refresh(sale)
         return {
@@ -114,6 +139,12 @@ class SaleRepository:
             "ticket": sale.ticket,
             "total": money(sale.total),
             "payment": sale.payment,
+            "amounts": {
+                "efectivo": money(sale.amount_efectivo),
+                "tarjeta": money(sale.amount_tarjeta),
+                "transferencia": money(sale.amount_transferencia),
+                "credito": money(sale.amount_credito),
+            },
             "soldAt": sale.sold_at.isoformat(),
             "store": "Tienda Central",
         }
@@ -272,8 +303,15 @@ class SaleRepository:
             "ticket": sale.ticket,
             "clientId": sale.client_id,
             "clientName": client_name,
+            "shiftId": getattr(sale, "shift_id", None),
             "payment": sale.payment,
             "total": money(sale.total),
+            "amounts": {
+                "efectivo": money(getattr(sale, "amount_efectivo", 0) or 0),
+                "tarjeta": money(getattr(sale, "amount_tarjeta", 0) or 0),
+                "transferencia": money(getattr(sale, "amount_transferencia", 0) or 0),
+                "credito": money(getattr(sale, "amount_credito", 0) or 0),
+            },
             "status": sale.status or "completed",
             "soldAt": sale.sold_at.isoformat(),
             "items": mapped,
@@ -346,6 +384,29 @@ class SaleRepository:
                 if bool(getattr(product, "tracks_inventory", True)) and qty(product.stock) < 5
             ],
         }
+
+
+def _payment_breakdown(payment: str, total: float, data: dict) -> dict[str, float]:
+    raw = data.get("amounts") or {}
+    if payment == "mixto":
+        amounts = {
+            "efectivo": money(raw.get("efectivo") or 0),
+            "tarjeta": money(raw.get("tarjeta") or 0),
+            "transferencia": money(raw.get("transferencia") or 0),
+            "credito": money(raw.get("credito") or 0),
+        }
+        if any(value < 0 for value in amounts.values()):
+            raise ValidationError("Los montos de pago no pueden ser negativos")
+        paid = round(sum(amounts.values()), 2)
+        if abs(paid - total) > 0.01:
+            raise ValidationError(f"La suma de pagos ({paid}) debe igualar el total ({total})")
+        if paid <= 0:
+            raise ValidationError("Indica cómo se paga la venta mixta")
+        return amounts
+
+    amounts = {"efectivo": 0.0, "tarjeta": 0.0, "transferencia": 0.0, "credito": 0.0}
+    amounts[payment] = money(total)
+    return amounts
 
 
 def _change(current: float, previous: float, label: str) -> str:

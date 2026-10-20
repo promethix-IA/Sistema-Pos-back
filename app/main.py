@@ -5,11 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from category.presentation.router import router as category_router
 from client.presentation.router import router as client_router
+from credit.presentation.router import router as credit_router
 from inventory.presentation.router import router as inventory_router
 from db.session import init_db
 from integration.presentation.router import router as integration_router
 from product.presentation.router import router as product_router
 from sale.presentation.router import router as sale_router
+from shift.presentation.router import router as shift_router
 from supplier.presentation.router import router as supplier_router
 from user.presentation.deps import get_current_user
 from user.presentation.router import router as user_router
@@ -48,6 +50,8 @@ app.include_router(inventory_router, dependencies=protected)
 app.include_router(client_router, dependencies=protected)
 app.include_router(supplier_router, dependencies=protected)
 app.include_router(sale_router, dependencies=protected)
+app.include_router(shift_router, dependencies=protected)
+app.include_router(credit_router, dependencies=protected)
 app.include_router(integration_router, dependencies=protected)
 
 

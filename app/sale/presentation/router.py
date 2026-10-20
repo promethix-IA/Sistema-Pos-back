@@ -19,9 +19,17 @@ class SaleItemIn(BaseModel):
     weight: float | None = None
 
 
+class PaymentAmountsIn(BaseModel):
+    efectivo: float = Field(default=0, ge=0)
+    tarjeta: float = Field(default=0, ge=0)
+    transferencia: float = Field(default=0, ge=0)
+    credito: float = Field(default=0, ge=0)
+
+
 class SaleIn(BaseModel):
     clientId: int | None = None
     payment: str
+    amounts: PaymentAmountsIn | None = None
     items: list[SaleItemIn] = Field(min_length=1)
 
 

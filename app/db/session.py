@@ -23,8 +23,10 @@ def init_db():
         PeripheralModel,
         PrinterSettingModel,
     )
+    from credit.infrastructure.models.credit_model import CreditDebtModel, CreditPaymentModel  # noqa: F401
     from product.infrastructure.models.product_model import ProductModel  # noqa: F401
     from sale.infrastructure.models.sale_model import SaleItemModel, SaleModel  # noqa: F401
+    from shift.infrastructure.models.shift_model import CashShiftModel  # noqa: F401
     from supplier.infrastructure.models.supplier_model import SupplierModel, SupplierOrderModel  # noqa: F401
     from user.infrastructure.models.user_model import UserModel  # noqa: F401
 
@@ -55,6 +57,44 @@ def init_db():
                 ))
                 connection.execute(text(
                     "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS cancelled_qty NUMERIC(12, 3) NOT NULL DEFAULT 0"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE sales ADD COLUMN IF NOT EXISTS shift_id INTEGER REFERENCES cash_shifts(id) ON DELETE SET NULL"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE sales ADD COLUMN IF NOT EXISTS amount_efectivo NUMERIC(14, 2) NOT NULL DEFAULT 0"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE sales ADD COLUMN IF NOT EXISTS amount_tarjeta NUMERIC(14, 2) NOT NULL DEFAULT 0"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE sales ADD COLUMN IF NOT EXISTS amount_transferencia NUMERIC(14, 2) NOT NULL DEFAULT 0"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE sales ADD COLUMN IF NOT EXISTS amount_credito NUMERIC(14, 2) NOT NULL DEFAULT 0"
+                ))
+                # Backfill simple payment amounts for legacy rows
+                connection.execute(text(
+                    """
+                    UPDATE sales
+                    SET amount_efectivo = total
+                    WHERE COALESCE(amount_efectivo, 0) = 0
+                      AND COALESCE(amount_tarjeta, 0) = 0
+                      AND COALESCE(amount_transferencia, 0) = 0
+                      AND COALESCE(amount_credito, 0) = 0
+                      AND payment = 'efectivo'
+                    """
+                ))
+                connection.execute(text(
+                    """
+                    UPDATE sales
+                    SET amount_tarjeta = total
+                    WHERE COALESCE(amount_efectivo, 0) = 0
+                      AND COALESCE(amount_tarjeta, 0) = 0
+                      AND COALESCE(amount_transferencia, 0) = 0
+                      AND COALESCE(amount_credito, 0) = 0
+                      AND payment = 'tarjeta'
+                    """
                 ))
             from inventory.infrastructure.repositories.inventory_repository import seed_movements
 
