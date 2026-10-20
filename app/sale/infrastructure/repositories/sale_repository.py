@@ -1,4 +1,3 @@
-import math
 from collections import defaultdict
 from datetime import timedelta
 from uuid import uuid4
@@ -11,7 +10,7 @@ from inventory.infrastructure.repositories.inventory_repository import record_mo
 from product.infrastructure.models.product_model import ProductModel
 from product.infrastructure.repositories.product_repository import to_product
 from sale.infrastructure.models.sale_model import SaleItemModel, SaleModel
-from shared.clock import money, now_bogota
+from shared.clock import money, now_bogota, qty
 from shared.exceptions import NotFoundError, ValidationError
 
 WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
@@ -39,13 +38,19 @@ class SaleRepository:
             product = products.get(item["productId"])
             if product is None:
                 raise NotFoundError("Producto no encontrado")
-            qty = float(item["qty"])
-            needed = math.ceil(qty)
-            if product.stock < needed:
+            amount = qty(item["qty"])
+            tracks = bool(getattr(product, "tracks_inventory", True))
+            sale_mode = (getattr(product, "sale_mode", None) or "unidad").strip().lower()
+            if sale_mode == "unidad":
+                tracks = True
+            if tracks and qty(product.stock) < amount:
                 raise ValidationError(f"Sin stock suficiente de {product.name}")
-            line_totals.append((product, qty, item.get("weight"), money(product.sell_price) * qty))
+            weight = item.get("weight")
+            if sale_mode == "granel" and weight is None:
+                weight = amount
+            line_totals.append((product, amount, weight, tracks, money(product.sell_price) * amount))
 
-        total = round(sum(line[3] for line in line_totals), 2)
+        total = round(sum(line[4] for line in line_totals), 2)
         sale = SaleModel(
             ticket=f"TMP-{uuid4().hex[:12]}",
             client_id=data.get("clientId"),
@@ -60,30 +65,31 @@ class SaleRepository:
         sale.ticket = f"VTA-{sale.id:06d}"
 
         names = []
-        for product, qty, weight, line_total in line_totals:
-            product.stock = max(0, product.stock - math.ceil(qty))
-            product.updated_at = current
-            record_movement(
-                self.session,
-                product,
-                "SALIDA_VENTA",
-                -math.ceil(qty),
-                f"Venta {sale.ticket}",
-                sale.ticket,
-                current,
-            )
+        for product, amount, weight, tracks, line_total in line_totals:
+            if tracks:
+                product.stock = max(0, qty(product.stock) - amount)
+                product.updated_at = current
+                record_movement(
+                    self.session,
+                    product,
+                    "SALIDA_VENTA",
+                    -amount,
+                    f"Venta {sale.ticket}",
+                    sale.ticket,
+                    current,
+                )
             self.session.add(
                 SaleItemModel(
                     sale_id=sale.id,
                     product_id=product.id,
                     product_name=product.name,
-                    qty=qty,
+                    qty=amount,
                     weight=weight,
                     unit_price=product.sell_price,
                     line_total=line_total,
                 )
             )
-            names.append(f"{product.name} ×{qty:g}")
+            names.append(f"{product.name} ×{amount:g}")
 
         if sale.client_id is not None:
             client = self.session.get(ClientModel, sale.client_id)
@@ -169,7 +175,11 @@ class SaleRepository:
             "weekSeries": week_series,
             "yearSeries": year_series,
             "topProducts": [to_product(product) for product in ranked[:5]],
-            "lowStock": [to_product(product) for product in products if product.stock < 5],
+            "lowStock": [
+                to_product(product)
+                for product in products
+                if bool(getattr(product, "tracks_inventory", True)) and qty(product.stock) < 5
+            ],
         }
 
 

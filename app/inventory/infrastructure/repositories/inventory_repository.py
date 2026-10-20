@@ -1,4 +1,3 @@
-import math
 from collections import defaultdict
 from datetime import date, datetime
 
@@ -8,7 +7,7 @@ from sqlalchemy.orm import Session
 from inventory.infrastructure.models.movement_model import InventoryMovementModel
 from product.infrastructure.models.product_model import ProductModel
 from sale.infrastructure.models.sale_model import SaleItemModel, SaleModel
-from shared.clock import money, now_bogota, whole
+from shared.clock import now_bogota, qty as as_qty
 from shared.exceptions import NotFoundError, ValidationError
 from supplier.infrastructure.models.supplier_model import SupplierOrderModel
 
@@ -33,7 +32,7 @@ def record_movement(
             product_code=product.code,
             movement_type=movement_type,
             qty=qty,
-            balance_after=int(product.stock or 0),
+            balance_after=as_qty(product.stock),
             note=note,
             ref=ref or "",
             moved_on=moved_on,
@@ -50,8 +49,8 @@ def to_movement(model: InventoryMovementModel) -> dict:
         "productName": model.product_name,
         "productCode": model.product_code,
         "type": model.movement_type,
-        "qty": money(model.qty),
-        "balanceAfter": model.balance_after,
+        "qty": as_qty(model.qty),
+        "balanceAfter": as_qty(model.balance_after),
         "note": model.note,
         "ref": model.ref or "",
     }
@@ -72,18 +71,21 @@ class InventoryRepository:
         product = self.session.get(ProductModel, data["productId"])
         if product is None:
             raise NotFoundError("Producto no encontrado")
-        value = int(data["qty"])
-        delta = value - int(product.stock or 0) if data["mode"] == "set" else value
+        if not bool(getattr(product, "tracks_inventory", True)):
+            raise ValidationError("Este producto no lleva inventario")
+        value = as_qty(data["qty"])
+        current_stock = as_qty(product.stock)
+        delta = as_qty(value - current_stock) if data["mode"] == "set" else value
         if delta == 0:
             raise ValidationError("El ajuste no cambia el stock")
-        new_stock = int(product.stock or 0) + delta
+        new_stock = as_qty(current_stock + delta)
         if new_stock < 0:
             raise ValidationError("El stock no puede quedar negativo")
         product.stock = new_stock
         product.updated_at = now_bogota()
         reason = (data.get("reason") or "").strip()
         if not reason:
-            reason = f"Ajuste a cantidad {value}" if data["mode"] == "set" else f"Ajuste relativo {delta:+d}"
+            reason = f"Ajuste a cantidad {value:g}" if data["mode"] == "set" else f"Ajuste relativo {delta:+g}"
         record_movement(self.session, product, "AJUSTE", delta, reason, "AJUSTE")
         self.session.commit()
         movement = self.session.scalars(
@@ -111,11 +113,11 @@ def seed_movements(session: Session) -> None:
             continue
         sold_on = sale.sold_at.date() if isinstance(sale.sold_at, datetime) else sale.sold_at
         events.append(
-            (sold_on, 1, product, "SALIDA_VENTA", -math.ceil(float(item.qty)), f"Venta {sale.ticket}", sale.ticket)
+            (sold_on, 1, product, "SALIDA_VENTA", -as_qty(item.qty), f"Venta {sale.ticket}", sale.ticket)
         )
 
     for order in session.scalars(select(SupplierOrderModel)).all():
-        added = whole(order.qty)
+        added = as_qty(order.qty)
         if order.product_id and order.product_id in by_id:
             targets = [by_id[order.product_id]]
         else:
@@ -127,30 +129,30 @@ def seed_movements(session: Session) -> None:
                 (order.ordered_on, 0, product, "ENTRADA_COMPRA", added, f"Compra {order.product}", invoice)
             )
 
-    net: dict[int, int] = defaultdict(int)
-    for _moved_on, _sort, product, _movement_type, qty, _note, _ref in events:
-        net[product.id] += int(qty)
+    net: dict[int, float] = defaultdict(float)
+    for _moved_on, _sort, product, _movement_type, movement_qty, _note, _ref in events:
+        net[product.id] += as_qty(movement_qty)
 
     combined = list(events)
     for product in products:
-        opening = int(product.stock or 0) - net[product.id]
+        opening = as_qty(as_qty(product.stock) - net[product.id])
         if opening:
             combined.append(
                 (date(2000, 1, 1), 0, product, "ENTRADA_INICIAL", opening, "Stock inicial del sistema", "INI")
             )
 
-    balances: dict[int, int] = defaultdict(int)
-    for moved_on, _sort, product, movement_type, qty, note, ref in sorted(
+    balances: dict[int, float] = defaultdict(float)
+    for moved_on, _sort, product, movement_type, movement_qty, note, ref in sorted(
         combined, key=lambda row: (row[0], row[1], row[2].id)
     ):
-        balances[product.id] += int(qty)
+        balances[product.id] = as_qty(balances[product.id] + as_qty(movement_qty))
         session.add(
             InventoryMovementModel(
                 product_id=product.id,
                 product_name=product.name,
                 product_code=product.code,
                 movement_type=movement_type,
-                qty=qty,
+                qty=movement_qty,
                 balance_after=balances[product.id],
                 note=note,
                 ref=ref or "",

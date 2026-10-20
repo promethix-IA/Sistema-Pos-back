@@ -38,6 +38,18 @@ def init_db():
                 connection.execute(text(
                     "ALTER TABLE supplier_orders ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id) ON DELETE SET NULL"
                 ))
+                connection.execute(text(
+                    "ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_mode VARCHAR(20) NOT NULL DEFAULT 'unidad'"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE products ADD COLUMN IF NOT EXISTS tracks_inventory BOOLEAN NOT NULL DEFAULT true"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE products ALTER COLUMN stock TYPE NUMERIC(14, 3) USING stock::numeric"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE inventory_movements ALTER COLUMN balance_after TYPE NUMERIC(14, 3) USING balance_after::numeric"
+                ))
             from inventory.infrastructure.repositories.inventory_repository import seed_movements
 
             session = SessionLocal()

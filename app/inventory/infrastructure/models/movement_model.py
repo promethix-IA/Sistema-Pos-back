@@ -12,7 +12,7 @@ class InventoryMovementModel(Base):
     product_code = Column(String(80), nullable=False)
     movement_type = Column(String(30), nullable=False)
     qty = Column(Numeric(12, 3), nullable=False)
-    balance_after = Column(Integer, nullable=False)
+    balance_after = Column(Numeric(14, 3), nullable=False)
     note = Column(Text, nullable=False, default="")
     ref = Column(String(80), nullable=False, default="")
     moved_on = Column(Date, nullable=False)

@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 
 from inventory.infrastructure.repositories.inventory_repository import record_movement
 from product.infrastructure.models.product_model import ProductModel
-from shared.clock import money, now_bogota, whole
-from shared.exceptions import NotFoundError
+from shared.clock import money, now_bogota, qty as as_qty
+from shared.exceptions import NotFoundError, ValidationError
 from supplier.infrastructure.models.supplier_model import SupplierModel, SupplierOrderModel
 
 
@@ -50,7 +50,7 @@ class SupplierRepository:
             product_id=data.get("productId"),
         )
         self.session.add(order)
-        added = whole(qty)
+        added = as_qty(qty)
         if data.get("productId"):
             chosen = self.session.get(ProductModel, data["productId"])
             if chosen is None:
@@ -64,7 +64,9 @@ class SupplierRepository:
                 if fragment and fragment in product.name.lower()
             ]
         for product in targets:
-            product.stock += added
+            if not bool(getattr(product, "tracks_inventory", True)):
+                raise ValidationError(f"{product.name} no lleva inventario")
+            product.stock = as_qty(product.stock) + added
             product.buy_price = unit_price
             product.updated_at = current
             record_movement(

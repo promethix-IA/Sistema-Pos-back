@@ -4,8 +4,31 @@ from sqlalchemy.orm import Session
 from category.infrastructure.repositories.category_repository import ensure_category
 from inventory.infrastructure.repositories.inventory_repository import record_movement
 from product.infrastructure.models.product_model import ProductModel
-from shared.clock import money, now_bogota
-from shared.exceptions import ConflictError, NotFoundError
+from shared.clock import money, now_bogota, qty
+from shared.exceptions import ConflictError, NotFoundError, ValidationError
+
+VALID_SALE_MODES = {"unidad", "granel"}
+
+
+def normalize_sale_settings(data: dict, *, existing: ProductModel | None = None) -> tuple[str, bool]:
+    raw_mode = data.get("saleMode")
+    if raw_mode is None and existing is not None:
+        sale_mode = (existing.sale_mode or "unidad").strip().lower()
+    else:
+        sale_mode = str(raw_mode or "unidad").strip().lower()
+    if sale_mode not in VALID_SALE_MODES:
+        raise ValidationError("El modo de venta debe ser unidad o granel")
+
+    if "tracksInventory" in data:
+        tracks_inventory = bool(data["tracksInventory"])
+    elif existing is not None:
+        tracks_inventory = bool(existing.tracks_inventory)
+    else:
+        tracks_inventory = True
+
+    if sale_mode == "unidad":
+        tracks_inventory = True
+    return sale_mode, tracks_inventory
 
 
 class ProductRepository:
@@ -24,6 +47,8 @@ class ProductRepository:
 
     def create(self, data: dict) -> ProductModel:
         self._ensure_code_available(data["code"])
+        sale_mode, tracks_inventory = normalize_sale_settings(data)
+        stock = qty(data.get("stock") or 0) if tracks_inventory else 0
         current = now_bogota()
         model = ProductModel(
             code=data["code"].strip(),
@@ -31,7 +56,9 @@ class ProductRepository:
             category=(data.get("category") or "Sin categoría").strip() or "Sin categoría",
             buy_price=data["buyPrice"],
             sell_price=data["sellPrice"],
-            stock=data["stock"],
+            stock=stock,
+            sale_mode=sale_mode,
+            tracks_inventory=tracks_inventory,
             created_at=current,
             updated_at=current,
         )
@@ -41,10 +68,10 @@ class ProductRepository:
         entry_type = data.get("entryType") or "ENTRADA_INICIAL"
         if entry_type not in {"ENTRADA_INICIAL", "IMPORTACION"}:
             entry_type = "ENTRADA_INICIAL"
-        if model.stock:
+        if tracks_inventory and stock:
             note = "Importación masiva CSV" if entry_type == "IMPORTACION" else "Stock inicial al crear producto"
             ref = "IMP" if entry_type == "IMPORTACION" else "INI"
-            record_movement(self.session, model, entry_type, model.stock, note, ref)
+            record_movement(self.session, model, entry_type, stock, note, ref)
         self.session.commit()
         self.session.refresh(model)
         return model
@@ -63,8 +90,12 @@ class ProductRepository:
             model.buy_price = data["buyPrice"]
         if "sellPrice" in data:
             model.sell_price = data["sellPrice"]
-        if "stock" in data:
-            model.stock = data["stock"]
+        if "saleMode" in data or "tracksInventory" in data:
+            model.sale_mode, model.tracks_inventory = normalize_sale_settings(data, existing=model)
+            if not model.tracks_inventory:
+                model.stock = 0
+        if "stock" in data and model.tracks_inventory:
+            model.stock = qty(data["stock"])
         model.updated_at = now_bogota()
         self.session.commit()
         self.session.refresh(model)
@@ -79,6 +110,10 @@ class ProductRepository:
 
 
 def to_product(model: ProductModel) -> dict:
+    sale_mode = (model.sale_mode or "unidad").strip().lower()
+    if sale_mode not in VALID_SALE_MODES:
+        sale_mode = "unidad"
+    tracks_inventory = True if sale_mode == "unidad" else bool(model.tracks_inventory)
     return {
         "id": model.id,
         "code": model.code,
@@ -86,5 +121,7 @@ def to_product(model: ProductModel) -> dict:
         "category": model.category,
         "buyPrice": money(model.buy_price),
         "sellPrice": money(model.sell_price),
-        "stock": model.stock,
+        "stock": qty(model.stock),
+        "saleMode": sale_mode,
+        "tracksInventory": tracks_inventory,
     }

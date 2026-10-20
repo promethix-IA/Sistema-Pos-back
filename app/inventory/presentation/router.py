@@ -15,7 +15,7 @@ router = APIRouter(prefix="/inventory", tags=["inventario"])
 class AdjustmentIn(BaseModel):
     productId: int
     mode: Literal["set", "delta"]
-    qty: int
+    qty: float
     reason: str = Field(default="", max_length=300)
 
 

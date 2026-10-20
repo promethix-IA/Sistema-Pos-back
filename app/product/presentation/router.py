@@ -1,13 +1,17 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db.session import get_db
 from product.infrastructure.repositories.product_repository import ProductRepository, to_product
-from shared.exceptions import ConflictError, NotFoundError
+from shared.exceptions import ConflictError, NotFoundError, ValidationError
 from shared.http import handle_domain_error
 
 router = APIRouter(prefix="/products", tags=["productos"])
+
+SaleMode = Literal["unidad", "granel"]
 
 
 class ProductIn(BaseModel):
@@ -16,7 +20,9 @@ class ProductIn(BaseModel):
     category: str = ""
     buyPrice: float = Field(ge=0)
     sellPrice: float = Field(ge=0)
-    stock: int = Field(ge=0)
+    stock: float = Field(default=0, ge=0)
+    saleMode: SaleMode = "unidad"
+    tracksInventory: bool = True
     entryType: str = "ENTRADA_INICIAL"
 
 
@@ -26,7 +32,9 @@ class ProductPatch(BaseModel):
     category: str | None = None
     buyPrice: float | None = Field(default=None, ge=0)
     sellPrice: float | None = Field(default=None, ge=0)
-    stock: int | None = Field(default=None, ge=0)
+    stock: float | None = Field(default=None, ge=0)
+    saleMode: SaleMode | None = None
+    tracksInventory: bool | None = None
 
 
 def get_repository(session: Session = Depends(get_db)) -> ProductRepository:
@@ -42,7 +50,7 @@ def list_products(repository: ProductRepository = Depends(get_repository)) -> li
 def create_product(payload: ProductIn, repository: ProductRepository = Depends(get_repository)) -> dict:
     try:
         model = repository.create(payload.model_dump())
-    except ConflictError as exc:
+    except (ConflictError, ValidationError) as exc:
         handle_domain_error(exc)
     return to_product(model)
 
@@ -56,6 +64,6 @@ def update_product(
     data = payload.model_dump(exclude_unset=True)
     try:
         model = repository.update(product_id, data)
-    except (NotFoundError, ConflictError) as exc:
+    except (NotFoundError, ConflictError, ValidationError) as exc:
         handle_domain_error(exc)
     return to_product(model)

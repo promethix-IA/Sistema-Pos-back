@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db.session import get_db
-from shared.exceptions import NotFoundError
+from shared.exceptions import NotFoundError, ValidationError
 from shared.http import handle_domain_error
 from supplier.infrastructure.repositories.supplier_repository import SupplierRepository
 
@@ -46,5 +46,5 @@ def create_order(
 ) -> dict:
     try:
         return repository.add_order(supplier_id, payload.model_dump())
-    except NotFoundError as exc:
+    except (NotFoundError, ValidationError) as exc:
         handle_domain_error(exc)

@@ -13,5 +13,9 @@ def money(value) -> float:
     return float(Decimal(value or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+def qty(value) -> float:
+    return float(Decimal(value or 0).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP))
+
+
 def whole(value) -> int:
     return int(Decimal(value or 0).to_integral_value(rounding=ROUND_HALF_UP))

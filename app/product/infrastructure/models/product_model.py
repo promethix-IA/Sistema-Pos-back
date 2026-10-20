@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Integer, Numeric, String
+from sqlalchemy import Boolean, Column, DateTime, Integer, Numeric, String
 
 from db.database import Base
 
@@ -12,6 +12,8 @@ class ProductModel(Base):
     category = Column(String(120), nullable=False)
     buy_price = Column(Numeric(14, 2), nullable=False)
     sell_price = Column(Numeric(14, 2), nullable=False)
-    stock = Column(Integer, nullable=False, default=0)
+    stock = Column(Numeric(14, 3), nullable=False, default=0)
+    sale_mode = Column(String(20), nullable=False, default="unidad")
+    tracks_inventory = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
