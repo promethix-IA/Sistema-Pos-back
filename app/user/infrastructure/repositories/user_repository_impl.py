@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -55,6 +57,20 @@ class UserRepositoryImpl(UserRepository):
         self.session.refresh(model)
         return self._to_entity(model)
 
+    def update_subscription(self, user_id: int, plan: str, plan_expires_at: datetime) -> User:
+        from shared.clock import now_bogota
+        from shared.exceptions import NotFoundError
+
+        model = self.session.get(UserModel, user_id)
+        if model is None:
+            raise NotFoundError("Usuario no encontrado")
+        model.plan = plan
+        model.plan_expires_at = plan_expires_at
+        model.updated_at = now_bogota()
+        self.session.commit()
+        self.session.refresh(model)
+        return self._to_entity(model)
+
     def list_platform_accounts(self) -> list[User]:
         stmt = (
             select(UserModel)
@@ -73,6 +89,8 @@ class UserRepositoryImpl(UserRepository):
             updated_at=model.updated_at,
             owner_id=model.owner_id,
             role=model.role or "owner",
+            plan=model.plan or "",
+            plan_expires_at=model.plan_expires_at,
         )
 
     def _to_model(self, user: User) -> UserModel:
@@ -82,6 +100,8 @@ class UserRepositoryImpl(UserRepository):
             is_active=user.is_active,
             owner_id=user.owner_id,
             role=user.role,
+            plan=user.plan or "",
+            plan_expires_at=user.plan_expires_at,
             created_at=user.created_at,
             updated_at=user.updated_at,
         )

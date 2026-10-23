@@ -107,6 +107,12 @@ def _apply_tenant_columns(connection) -> None:
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_clients_user_id ON clients (user_id)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_sales_user_id ON sales (user_id)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_users_owner_id ON users (owner_id)"))
+    connection.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(20) NOT NULL DEFAULT ''"
+    ))
+    connection.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMPTZ"
+    ))
 
 
 

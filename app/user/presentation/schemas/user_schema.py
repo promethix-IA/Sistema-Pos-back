@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from shared.subscription import plan_label, subscription_state
 from user.domain.entities.user import User
 
 
@@ -9,10 +10,15 @@ class UserCreateSchema(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     role: str | None = None
+    plan: str | None = None
 
 
 class UserRolePatch(BaseModel):
     role: str = Field(min_length=3, max_length=40)
+
+
+class UserSubscriptionPatch(BaseModel):
+    action: str = Field(min_length=3, max_length=40)
 
 
 class UserLoginSchema(BaseModel):
@@ -29,6 +35,10 @@ class UserResponseSchema(BaseModel):
     is_active: bool
     role: str
     owner_id: int | None = None
+    plan: str = ""
+    plan_label: str = "Sin plan"
+    plan_expires_at: datetime | None = None
+    subscription_status: str = "activo"
     created_at: datetime
     updated_at: datetime
 
@@ -40,6 +50,10 @@ class UserResponseSchema(BaseModel):
             is_active=user.is_active,
             role=user.role,
             owner_id=user.owner_id,
+            plan=user.plan or "",
+            plan_label=plan_label(user.plan),
+            plan_expires_at=user.plan_expires_at,
+            subscription_status=subscription_state(user),
             created_at=user.created_at,
             updated_at=user.updated_at,
         )

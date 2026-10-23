@@ -6,6 +6,7 @@ from shared.auth import create_access_token
 from shared.exceptions import ConflictError, ForbiddenError, NotFoundError, RateLimitError, UnauthorizedError, ValidationError
 from shared.http import handle_domain_error
 from shared.security.rate_limit import client_ip, ip_limiter, login_limiter
+from shared.subscription import PLAN_MONTHLY, PLAN_TRIAL, expires_for_plan, next_monthly_expiry
 from shared.tenancy import (
     ROLE_OWNER,
     can_manage_users,
@@ -25,6 +26,7 @@ from user.presentation.schemas.user_schema import (
     UserLoginSchema,
     UserResponseSchema,
     UserRolePatch,
+    UserSubscriptionPatch,
 )
 
 router = APIRouter(prefix="/users", tags=["usuarios"])
@@ -57,11 +59,16 @@ def create_user(
 ) -> UserResponseSchema:
     try:
         if is_platform_admin(_current_user):
+            plan = (payload.plan or PLAN_TRIAL).strip().lower()
+            if plan not in {PLAN_TRIAL, PLAN_MONTHLY}:
+                raise ValidationError("El plan debe ser prueba de 15 días o mensual.")
             user = CreateUser(repository).execute(
                 email=payload.email,
                 password=payload.password,
                 owner_id=None,
                 role=ROLE_OWNER,
+                plan=plan,
+                plan_expires_at=expires_for_plan(plan),
             )
         elif can_manage_users(_current_user) and not is_platform_admin(_current_user):
             try:
@@ -102,6 +109,33 @@ def update_user_role(
         except ValueError as exc:
             raise ValidationError("El rol debe ser administrador, cajero o inventario") from exc
         return UserResponseSchema.from_entity(repository.update_role(user_id, role))
+    except (ForbiddenError, NotFoundError, ValidationError) as exc:
+        handle_domain_error(exc)
+        raise
+
+
+@router.patch("/{user_id}/subscription", response_model=UserResponseSchema)
+def renew_subscription(
+    user_id: int,
+    payload: UserSubscriptionPatch,
+    repository: UserRepository = Depends(get_user_repository),
+    _current_user: User = Depends(get_current_user),
+) -> UserResponseSchema:
+    try:
+        if not is_platform_admin(_current_user):
+            raise ForbiddenError("Solo el admin de plataforma puede renovar planes.")
+        target = repository.get_by_id(user_id)
+        if target is None or target.role != ROLE_OWNER:
+            raise NotFoundError("Negocio no encontrado")
+        action = (payload.action or "renew").strip().lower()
+        if action not in {"renew", "activate_monthly"}:
+            raise ValidationError("La acción debe ser renovar o activar el plan mensual.")
+        updated = repository.update_subscription(
+            user_id,
+            PLAN_MONTHLY,
+            next_monthly_expiry(target.plan_expires_at),
+        )
+        return UserResponseSchema.from_entity(updated)
     except (ForbiddenError, NotFoundError, ValidationError) as exc:
         handle_domain_error(exc)
         raise

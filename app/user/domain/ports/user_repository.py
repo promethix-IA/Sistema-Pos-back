@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from user.domain.entities.user import User
 
@@ -34,4 +35,8 @@ class UserRepository(ABC):
 
     @abstractmethod
     def update_role(self, user_id: int, role: str) -> User:
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_subscription(self, user_id: int, plan: str, plan_expires_at: datetime) -> User:
         raise NotImplementedError

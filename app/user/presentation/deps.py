@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from shared.auth import decode_access_token
 from shared.exceptions import UnauthorizedError
+from shared.subscription import ensure_subscription_active
 from user.domain.entities.user import User
 from user.domain.ports.user_repository import UserRepository
 from user.infrastructure.repositories.user_repository_impl import UserRepositoryImpl
@@ -45,4 +46,12 @@ def get_current_user(
             detail="Usuario no autorizado",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    try:
+        ensure_subscription_active(user, repository)
+    except UnauthorizedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=exc.message,
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
     return user

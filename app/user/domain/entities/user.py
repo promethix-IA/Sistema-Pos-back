@@ -12,3 +12,5 @@ class User:
     updated_at: datetime
     owner_id: int | None = None
     role: str = "owner"
+    plan: str = ""
+    plan_expires_at: datetime | None = None
