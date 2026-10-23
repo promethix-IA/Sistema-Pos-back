@@ -21,8 +21,9 @@ PAYMENT_METHODS = {"efectivo", "tarjeta", "transferencia", "credito", "mixto"}
 
 
 class SaleRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     def confirm(self, data: dict) -> dict:
         payment = (data.get("payment") or "").strip().lower()
@@ -32,7 +33,9 @@ class SaleRepository:
             raise ValidationError("El carrito está vacío")
 
         shift = self.session.scalars(
-            select(CashShiftModel).where(CashShiftModel.status == "open").order_by(CashShiftModel.id.desc())
+            select(CashShiftModel)
+            .where(CashShiftModel.user_id == self.user_id, CashShiftModel.status == "open")
+            .order_by(CashShiftModel.id.desc())
         ).first()
         if shift is None:
             raise ValidationError("Debes abrir un turno en Cierre de caja antes de vender")
@@ -41,7 +44,12 @@ class SaleRepository:
         product_ids = [item["productId"] for item in data["items"]]
         products = {
             product.id: product
-            for product in self.session.scalars(select(ProductModel).where(ProductModel.id.in_(product_ids))).all()
+            for product in self.session.scalars(
+                select(ProductModel).where(
+                    ProductModel.user_id == self.user_id,
+                    ProductModel.id.in_(product_ids),
+                )
+            ).all()
         }
         line_totals = []
         for item in data["items"]:
@@ -65,10 +73,13 @@ class SaleRepository:
         client_id = data.get("clientId")
         if amounts["credito"] > 0 and not client_id:
             raise ValidationError("Las ventas a crédito requieren un cliente")
-        if client_id is not None and self.session.get(ClientModel, client_id) is None:
-            raise NotFoundError("Cliente no encontrado")
+        if client_id is not None:
+            client = self.session.get(ClientModel, client_id)
+            if client is None or client.user_id != self.user_id:
+                raise NotFoundError("Cliente no encontrado")
 
         sale = SaleModel(
+            user_id=self.user_id,
             ticket=f"TMP-{uuid4().hex[:12]}",
             client_id=client_id,
             shift_id=shift.id,
@@ -128,7 +139,7 @@ class SaleRepository:
             )
 
         if amounts["credito"] > 0:
-            CreditRepository(self.session).create_from_sale(
+            CreditRepository(self.session, self.user_id).create_from_sale(
                 sale.id, int(sale.client_id), sale.ticket, amounts["credito"]
             )
 
@@ -155,7 +166,11 @@ class SaleRepository:
         sales = list(
             self.session.scalars(
                 select(SaleModel)
-                .where(SaleModel.sold_at >= start, SaleModel.sold_at < end)
+                .where(
+                    SaleModel.user_id == self.user_id,
+                    SaleModel.sold_at >= start,
+                    SaleModel.sold_at < end,
+                )
                 .order_by(SaleModel.sold_at.desc(), SaleModel.id.desc())
             ).all()
         )
@@ -253,7 +268,7 @@ class SaleRepository:
 
     def _get_sale(self, sale_id: int) -> SaleModel:
         sale = self.session.get(SaleModel, sale_id)
-        if sale is None:
+        if sale is None or sale.user_id != self.user_id:
             raise NotFoundError("Venta no encontrada")
         return sale
 
@@ -321,7 +336,7 @@ class SaleRepository:
         today = now_bogota().date()
         week_start = today - timedelta(days=today.weekday())
         year_start = today.replace(month=1, day=1)
-        sales = list(self.session.scalars(select(SaleModel)).all())
+        sales = list(self.session.scalars(select(SaleModel).where(SaleModel.user_id == self.user_id)).all())
 
         def on(sale: SaleModel):
             return sale.sold_at.astimezone(now_bogota().tzinfo).date()
@@ -356,13 +371,18 @@ class SaleRepository:
         ]
 
         qty_by_product: dict[int, float] = defaultdict(float)
-        items = self.session.scalars(select(SaleItemModel)).all()
+        sale_ids = [sale.id for sale in sales]
+        items = (
+            self.session.scalars(select(SaleItemModel).where(SaleItemModel.sale_id.in_(sale_ids))).all()
+            if sale_ids
+            else []
+        )
         for item in items:
             if item.product_id:
                 active = qty(item.qty) - qty(getattr(item, "cancelled_qty", 0) or 0)
                 if active > 0:
                     qty_by_product[item.product_id] += active
-        products = list(self.session.scalars(select(ProductModel)).all())
+        products = list(self.session.scalars(select(ProductModel).where(ProductModel.user_id == self.user_id)).all())
         if qty_by_product:
             ranked = sorted(products, key=lambda product: qty_by_product.get(product.id, 0), reverse=True)
         else:

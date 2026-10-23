@@ -1,13 +1,15 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, Numeric, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
 
 from db.database import Base
 
 
 class ProductModel(Base):
     __tablename__ = "products"
+    __table_args__ = (UniqueConstraint("user_id", "code", name="products_user_code_key"),)
 
     id = Column(Integer, primary_key=True)
-    code = Column(String(80), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    code = Column(String(80), nullable=False)
     name = Column(String(200), nullable=False)
     category = Column(String(120), nullable=False)
     buy_price = Column(Numeric(14, 2), nullable=False)

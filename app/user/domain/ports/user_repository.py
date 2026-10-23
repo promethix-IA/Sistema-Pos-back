@@ -23,3 +23,15 @@ class UserRepository(ABC):
     @abstractmethod
     def all(self) -> list[User]:
         raise NotImplementedError
+
+    @abstractmethod
+    def list_for_tenant(self, tenant_id: int) -> list[User]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_platform_accounts(self) -> list[User]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_role(self, user_id: int, role: str) -> User:
+        raise NotImplementedError

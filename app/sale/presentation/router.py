@@ -9,6 +9,7 @@ from sale.infrastructure.repositories.sale_repository import SaleRepository
 from shared.clock import now_bogota
 from shared.exceptions import NotFoundError, ValidationError
 from shared.http import handle_domain_error
+from shared.tenancy import get_tenant_id
 
 router = APIRouter(tags=["ventas"])
 
@@ -47,8 +48,11 @@ class CancelIn(BaseModel):
     reason: str = ""
 
 
-def get_repository(session: Session = Depends(get_db)) -> SaleRepository:
-    return SaleRepository(session)
+def get_repository(
+    session: Session = Depends(get_db),
+    tenant_id: int = Depends(get_tenant_id),
+) -> SaleRepository:
+    return SaleRepository(session, tenant_id)
 
 
 @router.post("/sales", status_code=201)

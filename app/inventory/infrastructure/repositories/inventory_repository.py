@@ -27,6 +27,7 @@ def record_movement(
     moved_on = current.date() if isinstance(current, datetime) else current
     session.add(
         InventoryMovementModel(
+            user_id=product.user_id,
             product_id=product.id,
             product_name=product.name,
             product_code=product.code,
@@ -57,19 +58,24 @@ def to_movement(model: InventoryMovementModel) -> dict:
 
 
 class InventoryRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     def all(self) -> list[dict]:
-        stmt = select(InventoryMovementModel).order_by(
-            InventoryMovementModel.moved_on.desc(),
-            InventoryMovementModel.id.desc(),
+        stmt = (
+            select(InventoryMovementModel)
+            .where(InventoryMovementModel.user_id == self.user_id)
+            .order_by(
+                InventoryMovementModel.moved_on.desc(),
+                InventoryMovementModel.id.desc(),
+            )
         )
         return [to_movement(item) for item in self.session.scalars(stmt).all()]
 
     def adjust(self, data: dict) -> dict:
         product = self.session.get(ProductModel, data["productId"])
-        if product is None:
+        if product is None or product.user_id != self.user_id:
             raise NotFoundError("Producto no encontrado")
         if not bool(getattr(product, "tracks_inventory", True)):
             raise ValidationError("Este producto no lleva inventario")
@@ -89,7 +95,9 @@ class InventoryRepository:
         record_movement(self.session, product, "AJUSTE", delta, reason, "AJUSTE")
         self.session.commit()
         movement = self.session.scalars(
-            select(InventoryMovementModel).order_by(InventoryMovementModel.id.desc())
+            select(InventoryMovementModel)
+            .where(InventoryMovementModel.user_id == self.user_id)
+            .order_by(InventoryMovementModel.id.desc())
         ).first()
         return to_movement(movement)
 
@@ -148,6 +156,7 @@ def seed_movements(session: Session) -> None:
         balances[product.id] = as_qty(balances[product.id] + as_qty(movement_qty))
         session.add(
             InventoryMovementModel(
+                user_id=product.user_id,
                 product_id=product.id,
                 product_name=product.name,
                 product_code=product.code,

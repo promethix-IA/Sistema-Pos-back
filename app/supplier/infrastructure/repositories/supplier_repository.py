@@ -9,17 +9,23 @@ from supplier.infrastructure.models.supplier_model import SupplierModel, Supplie
 
 
 class SupplierRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     def all(self) -> list[dict]:
-        suppliers = list(self.session.scalars(select(SupplierModel).order_by(SupplierModel.name.asc())).all())
+        suppliers = list(
+            self.session.scalars(
+                select(SupplierModel).where(SupplierModel.user_id == self.user_id).order_by(SupplierModel.name.asc())
+            ).all()
+        )
         orders = self._orders([item.id for item in suppliers])
         return [self._to_dict(item, orders.get(item.id, [])) for item in suppliers]
 
     def create(self, data: dict) -> dict:
         current = now_bogota()
         model = SupplierModel(
+            user_id=self.user_id,
             name=data["name"].strip(),
             phone=(data.get("phone") or "").strip(),
             products=(data.get("products") or "").strip(),
@@ -33,7 +39,7 @@ class SupplierRepository:
 
     def add_order(self, supplier_id: int, data: dict) -> dict:
         supplier = self.session.get(SupplierModel, supplier_id)
-        if supplier is None:
+        if supplier is None or supplier.user_id != self.user_id:
             raise NotFoundError("Proveedor no encontrado")
         qty = data["qty"]
         unit_price = data["unitPrice"]
@@ -51,16 +57,17 @@ class SupplierRepository:
         )
         self.session.add(order)
         added = as_qty(qty)
+        owned_products = select(ProductModel).where(ProductModel.user_id == self.user_id)
         if data.get("productId"):
             chosen = self.session.get(ProductModel, data["productId"])
-            if chosen is None:
+            if chosen is None or chosen.user_id != self.user_id:
                 raise NotFoundError("Producto no encontrado")
             targets = [chosen]
         else:
             fragment = data["product"].strip().lower()
             targets = [
                 product
-                for product in self.session.scalars(select(ProductModel)).all()
+                for product in self.session.scalars(owned_products).all()
                 if fragment and fragment in product.name.lower()
             ]
         for product in targets:

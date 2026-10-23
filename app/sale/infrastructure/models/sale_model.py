@@ -1,13 +1,15 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
 
 from db.database import Base
 
 
 class SaleModel(Base):
     __tablename__ = "sales"
+    __table_args__ = (UniqueConstraint("user_id", "ticket", name="sales_user_ticket_key"),)
 
     id = Column(Integer, primary_key=True)
-    ticket = Column(String(40), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    ticket = Column(String(40), nullable=False)
     client_id = Column(Integer, ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
     shift_id = Column(Integer, ForeignKey("cash_shifts.id", ondelete="SET NULL"), nullable=True)
     payment = Column(String(20), nullable=False)

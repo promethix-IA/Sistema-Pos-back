@@ -22,8 +22,20 @@ class Settings(BaseSettings):
     supabase_db_name: str = "postgres"
     supabase_db_password: str = ""
     jwt_secret: str = "pos-cambia-esta-clave-jwt-por-una-larga"
-    jwt_expire_minutes: int = 1440
-    jwt_session_minutes: int = 480
+    jwt_expire_minutes: int = 720
+    jwt_session_minutes: int = 120
+    jwt_issuer: str = "promethixia-pos"
+    jwt_audience: str = "promethixia-pos-web"
+    app_env: str = "production"
+    cors_origins: str = (
+        "https://pos.promethixia.com,"
+        "https://promethixiafront.netlify.app,"
+        "http://localhost:8443,"
+        "http://127.0.0.1:8443"
+    )
+    cors_origin_regex: str = r"https://([a-z0-9-]+--)?promethixiafront\.netlify\.app"
+    login_max_attempts: int = 5
+    login_window_seconds: int = 900
 
     @field_validator("supabase_db_password")
     @classmethod
@@ -35,6 +47,33 @@ class Settings(BaseSettings):
                 "SUPABASE_SECRET_KEY no sirve como contraseña de Postgres."
             )
         return value
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def jwt_secret_is_strong(cls, value: str) -> str:
+        secret = value.strip()
+        weak = {
+            "pos-cambia-esta-clave-jwt-por-una-larga",
+            "cambia-esta-clave-jwt-por-una-de-32-bytes",
+        }
+        if len(secret) < 32:
+            raise ValueError("JWT_SECRET debe tener al menos 32 caracteres.")
+        if secret in weak:
+            raise ValueError("Cambia JWT_SECRET. No uses el valor de ejemplo.")
+        return secret
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() not in {"development", "dev", "local", "test"}
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def cors_regex(self) -> str | None:
+        pattern = self.cors_origin_regex.strip()
+        return pattern or None
 
     @property
     def project_ref(self) -> str:

@@ -10,3 +10,5 @@ class User:
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    owner_id: int | None = None
+    role: str = "owner"

@@ -9,11 +9,12 @@ from shared.exceptions import NotFoundError
 
 
 class ClientRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     def all(self, search: str | None = None) -> list[dict]:
-        stmt = select(ClientModel).order_by(ClientModel.name.asc())
+        stmt = select(ClientModel).where(ClientModel.user_id == self.user_id).order_by(ClientModel.name.asc())
         if search and search.strip():
             term = f"%{search.strip()}%"
             stmt = stmt.where(or_(ClientModel.name.ilike(term), ClientModel.phone.ilike(term)))
@@ -23,7 +24,7 @@ class ClientRepository:
 
     def get(self, client_id: int) -> dict:
         model = self.session.get(ClientModel, client_id)
-        if model is None:
+        if model is None or model.user_id != self.user_id:
             raise NotFoundError("Cliente no encontrado")
         history = self._histories([client_id]).get(client_id, [])
         return self._to_dict(model, history)
@@ -31,6 +32,7 @@ class ClientRepository:
     def create(self, data: dict) -> dict:
         current = now_bogota()
         model = ClientModel(
+            user_id=self.user_id,
             name=data["name"].strip(),
             phone=(data.get("phone") or "").strip(),
             email=(data.get("email") or "").strip(),

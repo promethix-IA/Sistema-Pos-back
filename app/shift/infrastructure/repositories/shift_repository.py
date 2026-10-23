@@ -3,7 +3,7 @@ from collections import defaultdict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from credit.infrastructure.models.credit_model import CreditPaymentModel
+from credit.infrastructure.models.credit_model import CreditDebtModel, CreditPaymentModel
 from product.infrastructure.models.product_model import ProductModel
 from sale.infrastructure.models.sale_model import SaleItemModel, SaleModel
 from shared.clock import money, now_bogota
@@ -12,8 +12,9 @@ from shift.infrastructure.models.shift_model import CashShiftModel
 
 
 class ShiftRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     def current(self) -> dict | None:
         shift = self._open_shift()
@@ -22,7 +23,10 @@ class ShiftRepository:
     def list_shifts(self, limit: int = 30) -> list[dict]:
         rows = list(
             self.session.scalars(
-                select(CashShiftModel).order_by(CashShiftModel.opened_at.desc(), CashShiftModel.id.desc()).limit(limit)
+                select(CashShiftModel)
+                .where(CashShiftModel.user_id == self.user_id)
+                .order_by(CashShiftModel.opened_at.desc(), CashShiftModel.id.desc())
+                .limit(limit)
             ).all()
         )
         return [self._to_shift(row) for row in rows]
@@ -35,6 +39,7 @@ class ShiftRepository:
             raise ValidationError("El efectivo inicial no puede ser negativo")
         current = now_bogota()
         shift = CashShiftModel(
+            user_id=self.user_id,
             opened_at=current,
             closed_at=None,
             opening_cash=opening,
@@ -51,7 +56,7 @@ class ShiftRepository:
 
     def close_shift(self, shift_id: int, data: dict) -> dict:
         shift = self.session.get(CashShiftModel, shift_id)
-        if shift is None:
+        if shift is None or shift.user_id != self.user_id:
             raise NotFoundError("Turno no encontrado")
         if shift.status != "open":
             raise ValidationError("El turno ya está cerrado")
@@ -71,11 +76,13 @@ class ShiftRepository:
 
     def summary(self, shift_id: int) -> dict:
         shift = self.session.get(CashShiftModel, shift_id)
-        if shift is None:
+        if shift is None or shift.user_id != self.user_id:
             raise NotFoundError("Turno no encontrado")
         sales = list(
             self.session.scalars(
-                select(SaleModel).where(SaleModel.shift_id == shift_id).order_by(SaleModel.sold_at.asc())
+                select(SaleModel)
+                .where(SaleModel.user_id == self.user_id, SaleModel.shift_id == shift_id)
+                .order_by(SaleModel.sold_at.asc())
             ).all()
         )
         active_sales = [sale for sale in sales if (sale.status or "completed") != "cancelled"]
@@ -97,7 +104,10 @@ class ShiftRepository:
         if shift.opened_at:
             payments = list(
                 self.session.scalars(
-                    select(CreditPaymentModel).where(
+                    select(CreditPaymentModel)
+                    .join(CreditDebtModel, CreditPaymentModel.debt_id == CreditDebtModel.id)
+                    .where(
+                        CreditDebtModel.user_id == self.user_id,
                         CreditPaymentModel.paid_at >= shift.opened_at,
                         CreditPaymentModel.paid_at <= (shift.closed_at or now_bogota()),
                     )
@@ -158,7 +168,9 @@ class ShiftRepository:
 
     def _open_shift(self) -> CashShiftModel | None:
         return self.session.scalars(
-            select(CashShiftModel).where(CashShiftModel.status == "open").order_by(CashShiftModel.id.desc())
+            select(CashShiftModel)
+            .where(CashShiftModel.user_id == self.user_id, CashShiftModel.status == "open")
+            .order_by(CashShiftModel.id.desc())
         ).first()
 
     def _to_shift(self, shift: CashShiftModel) -> dict:

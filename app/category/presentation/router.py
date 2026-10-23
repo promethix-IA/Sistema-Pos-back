@@ -6,6 +6,7 @@ from category.infrastructure.repositories.category_repository import CategoryRep
 from db.session import get_db
 from shared.exceptions import ConflictError, NotFoundError
 from shared.http import handle_domain_error
+from shared.tenancy import get_tenant_id
 
 router = APIRouter(prefix="/categories", tags=["categorias"])
 
@@ -14,8 +15,11 @@ class CategoryIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 
 
-def get_repository(session: Session = Depends(get_db)) -> CategoryRepository:
-    return CategoryRepository(session)
+def get_repository(
+    session: Session = Depends(get_db),
+    tenant_id: int = Depends(get_tenant_id),
+) -> CategoryRepository:
+    return CategoryRepository(session, tenant_id)
 
 
 @router.get("")

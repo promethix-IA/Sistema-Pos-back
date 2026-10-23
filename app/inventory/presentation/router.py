@@ -8,6 +8,7 @@ from db.session import get_db
 from inventory.infrastructure.repositories.inventory_repository import InventoryRepository
 from shared.exceptions import NotFoundError, ValidationError
 from shared.http import handle_domain_error
+from shared.tenancy import get_tenant_id
 
 router = APIRouter(prefix="/inventory", tags=["inventario"])
 
@@ -19,8 +20,11 @@ class AdjustmentIn(BaseModel):
     reason: str = Field(default="", max_length=300)
 
 
-def get_repository(session: Session = Depends(get_db)) -> InventoryRepository:
-    return InventoryRepository(session)
+def get_repository(
+    session: Session = Depends(get_db),
+    tenant_id: int = Depends(get_tenant_id),
+) -> InventoryRepository:
+    return InventoryRepository(session, tenant_id)
 
 
 @router.get("/movements")

@@ -7,6 +7,7 @@ class ClientModel(Base):
     __tablename__ = "clients"
 
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(200), nullable=False)
     phone = Column(String(40), nullable=False, default="")
     email = Column(String(255), nullable=False, default="")

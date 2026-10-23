@@ -10,7 +10,13 @@ class CreateUser:
     def __init__(self, repository: UserRepository):
         self.repository = repository
 
-    def execute(self, email: str, password: str) -> User:
+    def execute(
+        self,
+        email: str,
+        password: str,
+        owner_id: int | None = None,
+        role: str = "owner",
+    ) -> User:
         normalized_email = email.lower().strip()
         if self.repository.get_by_email(normalized_email) is not None:
             raise ConflictError("Ya existe un usuario con ese correo")
@@ -23,5 +29,7 @@ class CreateUser:
             is_active=True,
             created_at=now,
             updated_at=now,
+            owner_id=owner_id,
+            role=role,
         )
         return self.repository.create(user)

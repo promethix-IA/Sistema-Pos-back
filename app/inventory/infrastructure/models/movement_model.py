@@ -7,6 +7,7 @@ class InventoryMovementModel(Base):
     __tablename__ = "inventory_movements"
 
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
     product_name = Column(String(200), nullable=False)
     product_code = Column(String(80), nullable=False)

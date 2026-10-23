@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from shared.exceptions import ConflictError, NotFoundError, ValidationError
 from shared.http import handle_domain_error
+from shared.tenancy import get_tenant_id
 from shift.infrastructure.repositories.shift_repository import ShiftRepository
 from user.domain.entities.user import User
 from user.presentation.deps import get_current_user
@@ -22,8 +23,11 @@ class CloseShiftIn(BaseModel):
     notes: str = ""
 
 
-def get_repository(session: Session = Depends(get_db)) -> ShiftRepository:
-    return ShiftRepository(session)
+def get_repository(
+    session: Session = Depends(get_db),
+    tenant_id: int = Depends(get_tenant_id),
+) -> ShiftRepository:
+    return ShiftRepository(session, tenant_id)
 
 
 @router.get("/current")

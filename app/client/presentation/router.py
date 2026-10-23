@@ -8,6 +8,7 @@ from client.infrastructure.repositories.client_repository import ClientRepositor
 from db.session import get_db
 from shared.exceptions import NotFoundError
 from shared.http import handle_domain_error
+from shared.tenancy import get_tenant_id
 
 router = APIRouter(prefix="/clients", tags=["clientes"])
 
@@ -21,8 +22,11 @@ class ClientIn(BaseModel):
     birthDate: date | None = None
 
 
-def get_repository(session: Session = Depends(get_db)) -> ClientRepository:
-    return ClientRepository(session)
+def get_repository(
+    session: Session = Depends(get_db),
+    tenant_id: int = Depends(get_tenant_id),
+) -> ClientRepository:
+    return ClientRepository(session, tenant_id)
 
 
 @router.get("")

@@ -9,7 +9,7 @@ from user.domain.entities.user import User
 from user.domain.ports.user_repository import UserRepository
 from user.infrastructure.repositories.user_repository_impl import UserRepositoryImpl
 
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_user_repository(session: Session = Depends(get_db)) -> UserRepository:
@@ -17,13 +17,20 @@ def get_user_repository(session: Session = Depends(get_db)) -> UserRepository:
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     repository: UserRepository = Depends(get_user_repository),
 ) -> User:
+    if credentials is None or credentials.scheme.lower() != "bearer" or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     try:
         payload = decode_access_token(credentials.credentials)
-        user_id = int(payload.get("sub", "0"))
-    except (UnauthorizedError, TypeError, ValueError) as exc:
+        user_id = int(payload["sub"])
+    except (UnauthorizedError, TypeError, ValueError, KeyError) as exc:
         message = getattr(exc, "message", "Token inválido")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

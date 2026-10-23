@@ -11,6 +11,8 @@ from db.session import init_db
 from integration.presentation.router import router as integration_router
 from product.presentation.router import router as product_router
 from sale.presentation.router import router as sale_router
+from shared.config.settings import settings
+from shared.security.headers import SecurityHeadersMiddleware
 from shift.presentation.router import router as shift_router
 from supplier.presentation.router import router as supplier_router
 from user.presentation.deps import get_current_user
@@ -23,23 +25,27 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+docs_enabled = not settings.is_production
+
 app = FastAPI(
     title="Sistema POS",
     version="0.1.0",
     description="API del POS: usuarios, productos, inventario, clientes, proveedores, ventas e integraciones.",
     lifespan=lifespan,
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None,
 )
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://promethixiafront.netlify.app",
-        "http://localhost:8443",
-        "http://127.0.0.1:8443",
-    ],
-    allow_origin_regex=r"https://.*\.netlify\.app",
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origin_list,
+    allow_origin_regex=settings.cors_regex,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+    max_age=600,
 )
 
 app.include_router(user_router)
@@ -59,7 +65,6 @@ app.include_router(integration_router, dependencies=protected)
 def root() -> dict:
     return {
         "name": "Sistema POS",
-        "docs": "/docs",
         "health": "/health",
     }
 

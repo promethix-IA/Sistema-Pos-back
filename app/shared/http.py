@@ -1,6 +1,14 @@
 from fastapi import HTTPException, status
 
-from shared.exceptions import ConflictError, NotFoundError, UnauthorizedError, ValidationError
+from shared.config.settings import settings
+from shared.exceptions import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    RateLimitError,
+    UnauthorizedError,
+    ValidationError,
+)
 
 
 def handle_domain_error(exc: Exception) -> None:
@@ -16,4 +24,12 @@ def handle_domain_error(exc: Exception) -> None:
         ) from exc
     if isinstance(exc, ValidationError):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message) from exc
+    if isinstance(exc, RateLimitError):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=exc.message,
+            headers={"Retry-After": str(settings.login_window_seconds)},
+        ) from exc
+    if isinstance(exc, ForbiddenError):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=exc.message) from exc
     raise exc

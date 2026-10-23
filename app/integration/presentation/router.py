@@ -6,6 +6,7 @@ from db.session import get_db
 from integration.infrastructure.repositories.integration_repository import IntegrationRepository
 from shared.exceptions import NotFoundError
 from shared.http import handle_domain_error
+from shared.tenancy import get_tenant_id
 
 router = APIRouter(prefix="/integrations", tags=["integraciones"])
 
@@ -27,8 +28,11 @@ class DianIn(BaseModel):
     environment: str
 
 
-def get_repository(session: Session = Depends(get_db)) -> IntegrationRepository:
-    return IntegrationRepository(session)
+def get_repository(
+    session: Session = Depends(get_db),
+    tenant_id: int = Depends(get_tenant_id),
+) -> IntegrationRepository:
+    return IntegrationRepository(session, tenant_id)
 
 
 @router.get("")

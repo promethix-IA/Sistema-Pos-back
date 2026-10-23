@@ -8,6 +8,7 @@ from db.session import get_db
 from product.infrastructure.repositories.product_repository import ProductRepository, to_product
 from shared.exceptions import ConflictError, NotFoundError, ValidationError
 from shared.http import handle_domain_error
+from shared.tenancy import get_tenant_id
 
 router = APIRouter(prefix="/products", tags=["productos"])
 
@@ -37,8 +38,11 @@ class ProductPatch(BaseModel):
     tracksInventory: bool | None = None
 
 
-def get_repository(session: Session = Depends(get_db)) -> ProductRepository:
-    return ProductRepository(session)
+def get_repository(
+    session: Session = Depends(get_db),
+    tenant_id: int = Depends(get_tenant_id),
+) -> ProductRepository:
+    return ProductRepository(session, tenant_id)
 
 
 @router.get("")

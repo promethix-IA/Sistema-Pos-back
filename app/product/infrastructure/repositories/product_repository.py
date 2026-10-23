@@ -32,16 +32,17 @@ def normalize_sale_settings(data: dict, *, existing: ProductModel | None = None)
 
 
 class ProductRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     def all(self) -> list[ProductModel]:
-        stmt = select(ProductModel).order_by(ProductModel.name.asc())
+        stmt = select(ProductModel).where(ProductModel.user_id == self.user_id).order_by(ProductModel.name.asc())
         return list(self.session.scalars(stmt).all())
 
     def get(self, product_id: int) -> ProductModel:
         model = self.session.get(ProductModel, product_id)
-        if model is None:
+        if model is None or model.user_id != self.user_id:
             raise NotFoundError("Producto no encontrado")
         return model
 
@@ -51,6 +52,7 @@ class ProductRepository:
         stock = qty(data.get("stock") or 0) if tracks_inventory else 0
         current = now_bogota()
         model = ProductModel(
+            user_id=self.user_id,
             code=data["code"].strip(),
             name=data["name"].strip(),
             category=(data.get("category") or "Sin categoría").strip() or "Sin categoría",
@@ -64,7 +66,7 @@ class ProductRepository:
         )
         self.session.add(model)
         self.session.flush()
-        ensure_category(self.session, model.category)
+        ensure_category(self.session, model.category, self.user_id)
         entry_type = data.get("entryType") or "ENTRADA_INICIAL"
         if entry_type not in {"ENTRADA_INICIAL", "IMPORTACION"}:
             entry_type = "ENTRADA_INICIAL"
@@ -85,7 +87,7 @@ class ProductRepository:
             model.name = data["name"].strip()
         if "category" in data:
             model.category = data["category"].strip() or "Sin categoría"
-            ensure_category(self.session, model.category)
+            ensure_category(self.session, model.category, self.user_id)
         if "buyPrice" in data:
             model.buy_price = data["buyPrice"]
         if "sellPrice" in data:
@@ -102,7 +104,10 @@ class ProductRepository:
         return model
 
     def _ensure_code_available(self, code: str, ignore_id: int | None = None) -> None:
-        stmt = select(ProductModel).where(func.lower(ProductModel.code) == code.lower().strip())
+        stmt = select(ProductModel).where(
+            ProductModel.user_id == self.user_id,
+            func.lower(ProductModel.code) == code.lower().strip(),
+        )
         if ignore_id is not None:
             stmt = stmt.where(ProductModel.id != ignore_id)
         if self.session.scalar(stmt) is not None:

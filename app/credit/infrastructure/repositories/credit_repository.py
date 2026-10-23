@@ -8,24 +8,30 @@ from shared.exceptions import NotFoundError, ValidationError
 
 
 class CreditRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     def list_debts(self, status: str | None = None) -> list[dict]:
-        stmt = select(CreditDebtModel).order_by(CreditDebtModel.created_at.desc(), CreditDebtModel.id.desc())
+        stmt = (
+            select(CreditDebtModel)
+            .where(CreditDebtModel.user_id == self.user_id)
+            .order_by(CreditDebtModel.created_at.desc(), CreditDebtModel.id.desc())
+        )
         if status:
             stmt = stmt.where(CreditDebtModel.status == status)
         return [self._to_debt(row) for row in self.session.scalars(stmt).all()]
 
     def get_debt(self, debt_id: int) -> dict:
         debt = self.session.get(CreditDebtModel, debt_id)
-        if debt is None:
+        if debt is None or debt.user_id != self.user_id:
             raise NotFoundError("Crédito no encontrado")
         return self._to_debt(debt, include_payments=True)
 
     def create_from_sale(self, sale_id: int, client_id: int, ticket: str, amount: float) -> CreditDebtModel:
         current = now_bogota()
         debt = CreditDebtModel(
+            user_id=self.user_id,
             sale_id=sale_id,
             client_id=client_id,
             ticket=ticket,
@@ -41,7 +47,7 @@ class CreditRepository:
 
     def add_payment(self, debt_id: int, data: dict) -> dict:
         debt = self.session.get(CreditDebtModel, debt_id)
-        if debt is None:
+        if debt is None or debt.user_id != self.user_id:
             raise NotFoundError("Crédito no encontrado")
         remaining = money(money(debt.total) - money(debt.paid))
         if remaining <= 0 or debt.status == "paid":

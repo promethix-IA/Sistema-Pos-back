@@ -13,14 +13,25 @@ DEFAULT_PERIPHERALS = [
 
 
 class IntegrationRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     def get(self) -> dict:
         self._ensure()
-        peripherals = list(self.session.scalars(select(PeripheralModel).order_by(PeripheralModel.id.asc())).all())
-        printer = self.session.scalars(select(PrinterSettingModel)).first()
-        dian = self.session.scalars(select(DianSettingModel)).first()
+        peripherals = list(
+            self.session.scalars(
+                select(PeripheralModel)
+                .where(PeripheralModel.user_id == self.user_id)
+                .order_by(PeripheralModel.id.asc())
+            ).all()
+        )
+        printer = self.session.scalars(
+            select(PrinterSettingModel).where(PrinterSettingModel.user_id == self.user_id)
+        ).first()
+        dian = self.session.scalars(
+            select(DianSettingModel).where(DianSettingModel.user_id == self.user_id)
+        ).first()
         return {
             "peripherals": [
                 {"id": item.code, "label": item.label, "connected": item.connected, "port": item.port}
@@ -37,7 +48,12 @@ class IntegrationRepository:
 
     def set_connected(self, code: str, connected: bool) -> dict:
         self._ensure()
-        peripheral = self.session.scalar(select(PeripheralModel).where(PeripheralModel.code == code))
+        peripheral = self.session.scalar(
+            select(PeripheralModel).where(
+                PeripheralModel.user_id == self.user_id,
+                PeripheralModel.code == code,
+            )
+        )
         if peripheral is None:
             raise NotFoundError("Integración no encontrada")
         peripheral.connected = connected
@@ -46,11 +62,18 @@ class IntegrationRepository:
 
     def save_printer(self, data: dict) -> dict:
         self._ensure()
-        printer = self.session.scalars(select(PrinterSettingModel)).first()
+        printer = self.session.scalars(
+            select(PrinterSettingModel).where(PrinterSettingModel.user_id == self.user_id)
+        ).first()
         printer.host = data["host"].strip()
         printer.tcp_port = data["tcpPort"]
         printer.paper_width = data["paperWidth"]
-        peripheral = self.session.scalar(select(PeripheralModel).where(PeripheralModel.code == "printer"))
+        peripheral = self.session.scalar(
+            select(PeripheralModel).where(
+                PeripheralModel.user_id == self.user_id,
+                PeripheralModel.code == "printer",
+            )
+        )
         if peripheral is not None:
             peripheral.port = printer.host
         self.session.commit()
@@ -58,7 +81,9 @@ class IntegrationRepository:
 
     def save_dian(self, data: dict) -> dict:
         self._ensure()
-        dian = self.session.scalars(select(DianSettingModel)).first()
+        dian = self.session.scalars(
+            select(DianSettingModel).where(DianSettingModel.user_id == self.user_id)
+        ).first()
         dian.nit = data["nit"].strip()
         dian.software_id = data["softwareId"].strip()
         dian.software_pin = data["softwarePin"]
@@ -67,18 +92,29 @@ class IntegrationRepository:
         return self.get()
 
     def _ensure(self) -> None:
-        if self.session.scalar(select(PeripheralModel.id)) is None:
+        if self.session.scalar(select(PeripheralModel.id).where(PeripheralModel.user_id == self.user_id)) is None:
             for code, label, connected, port in DEFAULT_PERIPHERALS:
-                self.session.add(PeripheralModel(code=code, label=label, connected=connected, port=port))
-        if self.session.scalar(select(PrinterSettingModel.id)) is None:
-            self.session.add(PrinterSettingModel(host="192.168.1.50", tcp_port=9100, paper_width="80mm"))
-        if self.session.scalar(select(DianSettingModel.id)) is None:
+                self.session.add(
+                    PeripheralModel(
+                        user_id=self.user_id,
+                        code=code,
+                        label=label,
+                        connected=connected,
+                        port=port,
+                    )
+                )
+        if self.session.scalar(select(PrinterSettingModel.id).where(PrinterSettingModel.user_id == self.user_id)) is None:
+            self.session.add(
+                PrinterSettingModel(user_id=self.user_id, host="192.168.1.50", tcp_port=9100, paper_width="80mm")
+            )
+        if self.session.scalar(select(DianSettingModel.id).where(DianSettingModel.user_id == self.user_id)) is None:
             self.session.add(
                 DianSettingModel(
-                    nit="900.123.456-1",
-                    software_id="abc123-dian-prod",
+                    user_id=self.user_id,
+                    nit="",
+                    software_id="",
                     software_pin="",
-                    environment="Producción",
+                    environment="Habilitación / Pruebas",
                 )
             )
         self.session.commit()

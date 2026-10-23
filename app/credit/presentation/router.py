@@ -6,6 +6,7 @@ from credit.infrastructure.repositories.credit_repository import CreditRepositor
 from db.session import get_db
 from shared.exceptions import NotFoundError, ValidationError
 from shared.http import handle_domain_error
+from shared.tenancy import get_tenant_id
 
 router = APIRouter(prefix="/credits", tags=["creditos"])
 
@@ -16,8 +17,11 @@ class CreditPaymentIn(BaseModel):
     note: str = ""
 
 
-def get_repository(session: Session = Depends(get_db)) -> CreditRepository:
-    return CreditRepository(session)
+def get_repository(
+    session: Session = Depends(get_db),
+    tenant_id: int = Depends(get_tenant_id),
+) -> CreditRepository:
+    return CreditRepository(session, tenant_id)
 
 
 @router.get("")

@@ -14,6 +14,102 @@ def get_db():
         db.close()
 
 
+TENANT_TABLES = (
+    "products",
+    "categories",
+    "clients",
+    "suppliers",
+    "sales",
+    "inventory_movements",
+    "cash_shifts",
+    "credit_debts",
+    "peripherals",
+    "printer_settings",
+    "dian_settings",
+)
+
+
+def _apply_tenant_columns(connection) -> None:
+    connection.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE"
+    ))
+    connection.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'owner'"
+    ))
+    connection.execute(text(
+        "UPDATE users SET role = 'admin' WHERE lower(email) LIKE 'admin@%'"
+    ))
+    connection.execute(text(
+        """
+        UPDATE users
+        SET owner_id = NULL, role = 'owner'
+        WHERE owner_id IS NOT NULL
+          AND owner_id IN (SELECT admins.id FROM (SELECT id FROM users WHERE role = 'admin') AS admins)
+        """
+    ))
+    connection.execute(text(
+        "UPDATE users SET role = 'cajero' WHERE role = 'cashier'"
+    ))
+    connection.execute(text(
+        "UPDATE users SET role = 'owner' WHERE owner_id IS NULL AND role <> 'admin'"
+    ))
+    connection.execute(text(
+        """
+        UPDATE users
+        SET role = 'cajero'
+        WHERE owner_id IS NOT NULL
+          AND role NOT IN ('administrador', 'cajero', 'inventario')
+        """
+    ))
+    for table in TENANT_TABLES:
+        connection.execute(text(
+            f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE"
+        ))
+    owner = connection.execute(text(
+        "SELECT id FROM users WHERE role = 'owner' ORDER BY id ASC LIMIT 1"
+    )).scalar()
+    admin_id = connection.execute(text(
+        "SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1"
+    )).scalar()
+    fallback = owner or admin_id
+    if fallback is not None:
+        for table in TENANT_TABLES:
+            connection.execute(text(f"UPDATE {table} SET user_id = :owner WHERE user_id IS NULL"), {"owner": fallback})
+            if owner is not None and admin_id is not None and owner != admin_id:
+                connection.execute(
+                    text(f"UPDATE {table} SET user_id = :owner WHERE user_id = :admin_id"),
+                    {"owner": owner, "admin_id": admin_id},
+                )
+            connection.execute(text(f"ALTER TABLE {table} ALTER COLUMN user_id SET NOT NULL"))
+    connection.execute(text("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_code_key"))
+    connection.execute(text("ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_name_key"))
+    connection.execute(text("ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_ticket_key"))
+    connection.execute(text("ALTER TABLE peripherals DROP CONSTRAINT IF EXISTS peripherals_code_key"))
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS products_user_code_key ON products (user_id, code)"
+    ))
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS categories_user_name_key ON categories (user_id, name)"
+    ))
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS sales_user_ticket_key ON sales (user_id, ticket)"
+    ))
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS peripherals_user_code_key ON peripherals (user_id, code)"
+    ))
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS printer_settings_user_id_key ON printer_settings (user_id)"
+    ))
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS dian_settings_user_id_key ON dian_settings (user_id)"
+    ))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_products_user_id ON products (user_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_clients_user_id ON clients (user_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_sales_user_id ON sales (user_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_users_owner_id ON users (owner_id)"))
+
+
+
 def init_db():
     from category.infrastructure.models.category_model import CategoryModel  # noqa: F401
     from client.infrastructure.models.client_model import ClientModel, ClientPurchaseModel  # noqa: F401
@@ -96,6 +192,7 @@ def init_db():
                       AND payment = 'tarjeta'
                     """
                 ))
+                _apply_tenant_columns(connection)
             from inventory.infrastructure.repositories.inventory_repository import seed_movements
 
             session = SessionLocal()

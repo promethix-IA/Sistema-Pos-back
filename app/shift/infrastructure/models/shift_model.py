@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Integer, Numeric, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Text
 
 from db.database import Base
 
@@ -7,6 +7,7 @@ class CashShiftModel(Base):
     __tablename__ = "cash_shifts"
 
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     opened_at = Column(DateTime(timezone=True), nullable=False)
     closed_at = Column(DateTime(timezone=True), nullable=True)
     opening_cash = Column(Numeric(14, 2), nullable=False, default=0)
