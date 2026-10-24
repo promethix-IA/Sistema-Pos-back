@@ -25,6 +25,7 @@ TENANT_TABLES = (
     "credit_debts",
     "peripherals",
     "printer_settings",
+    "ticket_settings",
     "dian_settings",
 )
 
@@ -76,10 +77,15 @@ def _apply_tenant_columns(connection) -> None:
         for table in TENANT_TABLES:
             connection.execute(text(f"UPDATE {table} SET user_id = :owner WHERE user_id IS NULL"), {"owner": fallback})
             if owner is not None and admin_id is not None and owner != admin_id:
-                connection.execute(
-                    text(f"UPDATE {table} SET user_id = :owner WHERE user_id = :admin_id"),
-                    {"owner": owner, "admin_id": admin_id},
-                )
+                owner_has_rows = connection.execute(
+                    text(f"SELECT 1 FROM {table} WHERE user_id = :owner LIMIT 1"),
+                    {"owner": owner},
+                ).first()
+                if owner_has_rows is None:
+                    connection.execute(
+                        text(f"UPDATE {table} SET user_id = :owner WHERE user_id = :admin_id"),
+                        {"owner": owner, "admin_id": admin_id},
+                    )
             connection.execute(text(f"ALTER TABLE {table} ALTER COLUMN user_id SET NOT NULL"))
     connection.execute(text("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_code_key"))
     connection.execute(text("ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_name_key"))
@@ -103,6 +109,9 @@ def _apply_tenant_columns(connection) -> None:
     connection.execute(text(
         "CREATE UNIQUE INDEX IF NOT EXISTS dian_settings_user_id_key ON dian_settings (user_id)"
     ))
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ticket_settings_user_id_key ON ticket_settings (user_id)"
+    ))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_products_user_id ON products (user_id)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_clients_user_id ON clients (user_id)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_sales_user_id ON sales (user_id)"))
@@ -124,6 +133,7 @@ def init_db():
         DianSettingModel,
         PeripheralModel,
         PrinterSettingModel,
+        TicketSettingModel,
     )
     from credit.infrastructure.models.credit_model import CreditDebtModel, CreditPaymentModel  # noqa: F401
     from product.infrastructure.models.product_model import ProductModel  # noqa: F401

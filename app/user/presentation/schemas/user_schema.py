@@ -36,7 +36,7 @@ class UserResponseSchema(BaseModel):
     role: str
     owner_id: int | None = None
     plan: str = ""
-    plan_label: str = "Sin plan"
+    plan_label: str = "Libre"
     plan_expires_at: datetime | None = None
     subscription_status: str = "activo"
     created_at: datetime

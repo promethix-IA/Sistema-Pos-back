@@ -71,6 +71,21 @@ class UserRepositoryImpl(UserRepository):
         self.session.refresh(model)
         return self._to_entity(model)
 
+    def delete(self, user_id: int) -> None:
+        from sqlalchemy.exc import IntegrityError
+
+        from shared.exceptions import ConflictError, NotFoundError
+
+        model = self.session.get(UserModel, user_id)
+        if model is None:
+            raise NotFoundError("Usuario no encontrado")
+        try:
+            self.session.delete(model)
+            self.session.commit()
+        except IntegrityError as exc:
+            self.session.rollback()
+            raise ConflictError("No se pudo eliminar porque el negocio aún tiene datos asociados.") from exc
+
     def list_platform_accounts(self) -> list[User]:
         stmt = (
             select(UserModel)

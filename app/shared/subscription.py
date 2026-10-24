@@ -66,7 +66,7 @@ def plan_label(plan: str | None) -> str:
         return "Prueba gratis"
     if plan == PLAN_MONTHLY:
         return "Mensual"
-    return "Sin plan"
+    return "Libre"
 
 
 def subscription_state(user: User, now: datetime | None = None) -> str:

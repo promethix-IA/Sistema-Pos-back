@@ -40,3 +40,7 @@ class UserRepository(ABC):
     @abstractmethod
     def update_subscription(self, user_id: int, plan: str, plan_expires_at: datetime) -> User:
         raise NotImplementedError
+
+    @abstractmethod
+    def delete(self, user_id: int) -> None:
+        raise NotImplementedError

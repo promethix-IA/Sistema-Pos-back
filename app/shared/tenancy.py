@@ -28,6 +28,10 @@ def can_manage_users(user: User) -> bool:
     return user.role in {ROLE_ADMIN, ROLE_OWNER, ROLE_MANAGER}
 
 
+def can_edit_business_settings(user: User) -> bool:
+    return user.role in {ROLE_OWNER, ROLE_MANAGER}
+
+
 def normalize_business_role(role: str | None) -> str:
     value = (role or ROLE_CASHIER).strip().lower()
     if value == "cashier":

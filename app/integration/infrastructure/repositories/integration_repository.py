@@ -1,7 +1,12 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from integration.infrastructure.models.integration_model import DianSettingModel, PeripheralModel, PrinterSettingModel
+from integration.infrastructure.models.integration_model import (
+    DianSettingModel,
+    PeripheralModel,
+    PrinterSettingModel,
+    TicketSettingModel,
+)
 from shared.exceptions import NotFoundError
 
 DEFAULT_PERIPHERALS = [
@@ -10,6 +15,18 @@ DEFAULT_PERIPHERALS = [
     ("printer", "Impresora de tickets", True, "192.168.1.50"),
     ("dian", "DIAN Facturación Electrónica", True, "API REST"),
 ]
+
+DEFAULT_TICKET = {
+    "storeName": "Mi negocio",
+    "nitLine": "",
+    "footer": "¡Gracias por su compra!",
+    "showDate": True,
+    "showClient": True,
+    "showPayment": True,
+    "showChange": True,
+    "showReprint": True,
+    "extraHeader": "",
+}
 
 
 class IntegrationRepository:
@@ -32,12 +49,16 @@ class IntegrationRepository:
         dian = self.session.scalars(
             select(DianSettingModel).where(DianSettingModel.user_id == self.user_id)
         ).first()
+        ticket = self.session.scalars(
+            select(TicketSettingModel).where(TicketSettingModel.user_id == self.user_id)
+        ).first()
         return {
             "peripherals": [
                 {"id": item.code, "label": item.label, "connected": item.connected, "port": item.port}
                 for item in peripherals
             ],
             "printer": {"host": printer.host, "tcpPort": printer.tcp_port, "paperWidth": printer.paper_width},
+            "ticket": self._to_ticket(ticket),
             "dian": {
                 "nit": dian.nit,
                 "softwareId": dian.software_id,
@@ -79,6 +100,23 @@ class IntegrationRepository:
         self.session.commit()
         return self.get()
 
+    def save_ticket(self, data: dict) -> dict:
+        self._ensure()
+        ticket = self.session.scalars(
+            select(TicketSettingModel).where(TicketSettingModel.user_id == self.user_id)
+        ).first()
+        ticket.store_name = (data.get("storeName") or DEFAULT_TICKET["storeName"]).strip() or DEFAULT_TICKET["storeName"]
+        ticket.nit_line = (data.get("nitLine") or "").strip()
+        ticket.footer = (data.get("footer") or "").strip()
+        ticket.show_date = bool(data.get("showDate", True))
+        ticket.show_client = bool(data.get("showClient", True))
+        ticket.show_payment = bool(data.get("showPayment", True))
+        ticket.show_change = bool(data.get("showChange", True))
+        ticket.show_reprint = bool(data.get("showReprint", True))
+        ticket.extra_header = (data.get("extraHeader") or "").strip()
+        self.session.commit()
+        return self.get()
+
     def save_dian(self, data: dict) -> dict:
         self._ensure()
         dian = self.session.scalars(
@@ -90,6 +128,24 @@ class IntegrationRepository:
         dian.environment = data["environment"]
         self.session.commit()
         return self.get()
+
+    def _to_ticket(self, ticket: TicketSettingModel | None) -> dict:
+        if ticket is None:
+            return dict(DEFAULT_TICKET)
+        return {
+            "storeName": ticket.store_name or DEFAULT_TICKET["storeName"],
+            "nitLine": ticket.nit_line or "",
+            "footer": ticket.footer or "",
+            "showDate": bool(ticket.show_date),
+            "showClient": bool(ticket.show_client),
+            "showPayment": bool(ticket.show_payment),
+            "showChange": bool(ticket.show_change),
+            "showReprint": bool(ticket.show_reprint),
+            "extraHeader": ticket.extra_header or "",
+        }
+
+    def ensure_defaults(self) -> None:
+        self._ensure()
 
     def _ensure(self) -> None:
         if self.session.scalar(select(PeripheralModel.id).where(PeripheralModel.user_id == self.user_id)) is None:
@@ -106,6 +162,21 @@ class IntegrationRepository:
         if self.session.scalar(select(PrinterSettingModel.id).where(PrinterSettingModel.user_id == self.user_id)) is None:
             self.session.add(
                 PrinterSettingModel(user_id=self.user_id, host="192.168.1.50", tcp_port=9100, paper_width="80mm")
+            )
+        if self.session.scalar(select(TicketSettingModel.id).where(TicketSettingModel.user_id == self.user_id)) is None:
+            self.session.add(
+                TicketSettingModel(
+                    user_id=self.user_id,
+                    store_name=DEFAULT_TICKET["storeName"],
+                    nit_line=DEFAULT_TICKET["nitLine"],
+                    footer=DEFAULT_TICKET["footer"],
+                    show_date=True,
+                    show_client=True,
+                    show_payment=True,
+                    show_change=True,
+                    show_reprint=True,
+                    extra_header="",
+                )
             )
         if self.session.scalar(select(DianSettingModel.id).where(DianSettingModel.user_id == self.user_id)) is None:
             self.session.add(

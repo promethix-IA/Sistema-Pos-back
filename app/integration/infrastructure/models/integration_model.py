@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text, UniqueConstraint
 
 from db.database import Base
 
@@ -23,6 +23,22 @@ class PrinterSettingModel(Base):
     host = Column(String(120), nullable=False)
     tcp_port = Column(Integer, nullable=False)
     paper_width = Column(String(20), nullable=False)
+
+
+class TicketSettingModel(Base):
+    __tablename__ = "ticket_settings"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    store_name = Column(String(120), nullable=False, default="Mi negocio")
+    nit_line = Column(String(200), nullable=False, default="")
+    footer = Column(String(200), nullable=False, default="¡Gracias por su compra!")
+    show_date = Column(Boolean, nullable=False, default=True)
+    show_client = Column(Boolean, nullable=False, default=True)
+    show_payment = Column(Boolean, nullable=False, default=True)
+    show_change = Column(Boolean, nullable=False, default=True)
+    show_reprint = Column(Boolean, nullable=False, default=True)
+    extra_header = Column(Text, nullable=False, default="")
 
 
 class DianSettingModel(Base):

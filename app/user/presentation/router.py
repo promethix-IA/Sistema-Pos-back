@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from db.session import get_db
+from integration.infrastructure.repositories.integration_repository import IntegrationRepository
 from shared.auth import create_access_token
 from shared.exceptions import ConflictError, ForbiddenError, NotFoundError, RateLimitError, UnauthorizedError, ValidationError
 from shared.http import handle_domain_error
@@ -55,6 +56,7 @@ def list_users(
 def create_user(
     payload: UserCreateSchema,
     repository: UserRepository = Depends(get_user_repository),
+    session: Session = Depends(get_db),
     _current_user: User = Depends(get_current_user),
 ) -> UserResponseSchema:
     try:
@@ -86,6 +88,8 @@ def create_user(
     except (ConflictError, ForbiddenError, ValidationError) as exc:
         handle_domain_error(exc)
         raise
+    if user.role == ROLE_OWNER and user.id is not None:
+        IntegrationRepository(session, int(user.id)).ensure_defaults()
     return UserResponseSchema.from_entity(user)
 
 
@@ -110,6 +114,36 @@ def update_user_role(
             raise ValidationError("El rol debe ser administrador, cajero o inventario") from exc
         return UserResponseSchema.from_entity(repository.update_role(user_id, role))
     except (ForbiddenError, NotFoundError, ValidationError) as exc:
+        handle_domain_error(exc)
+        raise
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: int,
+    repository: UserRepository = Depends(get_user_repository),
+    _current_user: User = Depends(get_current_user),
+) -> None:
+    try:
+        if user_id == _current_user.id:
+            raise ForbiddenError("No puedes eliminar tu propia cuenta.")
+        target = repository.get_by_id(user_id)
+        if target is None:
+            raise NotFoundError("Usuario no encontrado")
+        if target.role == "admin":
+            raise ForbiddenError("No se puede eliminar al admin de plataforma.")
+        if is_platform_admin(_current_user):
+            if target.role != ROLE_OWNER:
+                raise ForbiddenError("Solo puedes eliminar negocios (usuarios padre).")
+        elif can_manage_users(_current_user):
+            if tenant_id_of(target) != tenant_id_of(_current_user):
+                raise NotFoundError("Usuario no encontrado")
+            if target.role in {"admin", "owner"}:
+                raise ForbiddenError("No se puede eliminar esta cuenta.")
+        else:
+            raise ForbiddenError("No tienes permiso para eliminar usuarios.")
+        repository.delete(user_id)
+    except (ConflictError, ForbiddenError, NotFoundError) as exc:
         handle_domain_error(exc)
         raise
 
