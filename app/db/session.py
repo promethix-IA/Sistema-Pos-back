@@ -140,6 +140,7 @@ def init_db():
     from sale.infrastructure.models.sale_model import SaleItemModel, SaleModel  # noqa: F401
     from shift.infrastructure.models.shift_model import CashShiftModel  # noqa: F401
     from supplier.infrastructure.models.supplier_model import SupplierModel, SupplierOrderModel  # noqa: F401
+    from user.infrastructure.models.password_reset_model import PasswordResetModel  # noqa: F401
     from user.infrastructure.models.user_model import UserModel  # noqa: F401
 
     for attempt in range(10):

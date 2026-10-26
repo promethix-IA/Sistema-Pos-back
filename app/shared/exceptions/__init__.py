@@ -32,3 +32,9 @@ class ForbiddenError(Exception):
     def __init__(self, message: str = "No tienes permiso para esta acción"):
         self.message = message
         super().__init__(message)
+
+
+class MailError(Exception):
+    def __init__(self, message: str = "No pudimos enviar el código. Intenta de nuevo en unos minutos."):
+        self.message = message
+        super().__init__(message)

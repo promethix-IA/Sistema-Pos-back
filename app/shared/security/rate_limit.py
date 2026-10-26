@@ -45,6 +45,16 @@ ip_limiter = SlidingWindowLimiter(
     window_seconds=settings.login_window_seconds,
 )
 
+reset_limiter = SlidingWindowLimiter(
+    max_attempts=5,
+    window_seconds=settings.login_window_seconds,
+)
+
+reset_ip_limiter = SlidingWindowLimiter(
+    max_attempts=20,
+    window_seconds=settings.login_window_seconds,
+)
+
 
 def client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for")

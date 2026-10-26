@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     cors_origin_regex: str = r"https://([a-z0-9-]+--)?promethixiafront\.netlify\.app"
     login_max_attempts: int = 5
     login_window_seconds: int = 900
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = "promethixia@gmail.com"
+    smtp_password: str = ""
+    smtp_from: str = "Promethixia <promethixia@gmail.com>"
+    password_reset_minutes: int = 10
 
     @field_validator("supabase_db_password")
     @classmethod

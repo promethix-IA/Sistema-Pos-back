@@ -27,6 +27,21 @@ class UserLoginSchema(BaseModel):
     remember: bool = True
 
 
+class PasswordEmailSchema(BaseModel):
+    email: EmailStr
+
+
+class PasswordCodeSchema(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=12)
+
+
+class PasswordResetSchema(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=12)
+    password: str = Field(min_length=8, max_length=128)
+
+
 class UserResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

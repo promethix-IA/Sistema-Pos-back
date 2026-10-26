@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from integration.infrastructure.repositories.integration_repository import IntegrationRepository
 from shared.auth import create_access_token
-from shared.exceptions import ConflictError, ForbiddenError, NotFoundError, RateLimitError, UnauthorizedError, ValidationError
+from shared.exceptions import ConflictError, ForbiddenError, MailError, NotFoundError, RateLimitError, UnauthorizedError, ValidationError
 from shared.http import handle_domain_error
-from shared.security.rate_limit import client_ip, ip_limiter, login_limiter
+from shared.mail import mail_configured
+from shared.security.rate_limit import client_ip, ip_limiter, login_limiter, reset_ip_limiter, reset_limiter
 from shared.subscription import PLAN_MONTHLY, PLAN_TRIAL, expires_for_plan, next_monthly_expiry
 from shared.tenancy import (
     ROLE_OWNER,
@@ -17,12 +18,18 @@ from shared.tenancy import (
 )
 from user.application.create_user import CreateUser
 from user.application.login_user import LoginUser
+from user.application.password_reset import RequestPasswordReset, ResetPassword, VerifyPasswordReset
 from user.domain.entities.user import User
+from user.domain.ports.password_reset_repository import PasswordResetRepository
 from user.domain.ports.user_repository import UserRepository
+from user.infrastructure.repositories.password_reset_repository_impl import PasswordResetRepositoryImpl
 from user.infrastructure.repositories.user_repository_impl import UserRepositoryImpl
 from user.presentation.deps import get_current_user
 from user.presentation.schemas.user_schema import (
     LoginResponseSchema,
+    PasswordCodeSchema,
+    PasswordEmailSchema,
+    PasswordResetSchema,
     UserCreateSchema,
     UserLoginSchema,
     UserResponseSchema,
@@ -35,6 +42,10 @@ router = APIRouter(prefix="/users", tags=["usuarios"])
 
 def get_user_repository(session: Session = Depends(get_db)) -> UserRepository:
     return UserRepositoryImpl(session)
+
+
+def get_password_reset_repository(session: Session = Depends(get_db)) -> PasswordResetRepository:
+    return PasswordResetRepositoryImpl(session)
 
 
 @router.get("", response_model=list[UserResponseSchema])
@@ -173,6 +184,59 @@ def renew_subscription(
     except (ForbiddenError, NotFoundError, ValidationError) as exc:
         handle_domain_error(exc)
         raise
+
+
+@router.post("/password/forgot")
+def request_password_reset(
+    payload: PasswordEmailSchema,
+    request: Request,
+    users: UserRepository = Depends(get_user_repository),
+    resets: PasswordResetRepository = Depends(get_password_reset_repository),
+) -> dict:
+    email = payload.email.lower().strip()
+    try:
+        if not mail_configured():
+            raise MailError("No pudimos enviar el código. Intenta más tarde.")
+        reset_ip_limiter.check(f"ip:{client_ip(request)}")
+        reset_limiter.check(f"email:{email}")
+        RequestPasswordReset(users, resets).execute(email)
+    except (RateLimitError, ValidationError, MailError) as exc:
+        handle_domain_error(exc)
+        raise
+    return {"message": "Si el correo está registrado, te enviamos un código de verificación."}
+
+
+@router.post("/password/verify")
+def verify_password_reset(
+    payload: PasswordCodeSchema,
+    request: Request,
+    resets: PasswordResetRepository = Depends(get_password_reset_repository),
+) -> dict:
+    email = payload.email.lower().strip()
+    try:
+        ip_limiter.check(f"reset-verify:{client_ip(request)}")
+        VerifyPasswordReset(resets).execute(email, payload.code)
+    except (RateLimitError, ValidationError) as exc:
+        handle_domain_error(exc)
+        raise
+    return {"ok": True}
+
+
+@router.post("/password/reset")
+def reset_password(
+    payload: PasswordResetSchema,
+    request: Request,
+    users: UserRepository = Depends(get_user_repository),
+    resets: PasswordResetRepository = Depends(get_password_reset_repository),
+) -> dict:
+    email = payload.email.lower().strip()
+    try:
+        ip_limiter.check(f"reset:{client_ip(request)}")
+        ResetPassword(users, resets).execute(email, payload.code, payload.password)
+    except (RateLimitError, ValidationError) as exc:
+        handle_domain_error(exc)
+        raise
+    return {"message": "La contraseña se actualizó. Ya puedes iniciar sesión."}
 
 
 @router.post("/login", response_model=LoginResponseSchema)

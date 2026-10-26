@@ -4,6 +4,7 @@ from shared.config.settings import settings
 from shared.exceptions import (
     ConflictError,
     ForbiddenError,
+    MailError,
     NotFoundError,
     RateLimitError,
     UnauthorizedError,
@@ -32,4 +33,6 @@ def handle_domain_error(exc: Exception) -> None:
         ) from exc
     if isinstance(exc, ForbiddenError):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=exc.message) from exc
+    if isinstance(exc, MailError):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.message) from exc
     raise exc

@@ -44,3 +44,7 @@ class UserRepository(ABC):
     @abstractmethod
     def delete(self, user_id: int) -> None:
         raise NotImplementedError
+
+    @abstractmethod
+    def update_password(self, user_id: int, password_hash: str) -> User:
+        raise NotImplementedError

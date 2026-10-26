@@ -71,6 +71,19 @@ class UserRepositoryImpl(UserRepository):
         self.session.refresh(model)
         return self._to_entity(model)
 
+    def update_password(self, user_id: int, password_hash: str) -> User:
+        from shared.clock import now_bogota
+        from shared.exceptions import NotFoundError
+
+        model = self.session.get(UserModel, user_id)
+        if model is None:
+            raise NotFoundError("Usuario no encontrado")
+        model.password_hash = password_hash
+        model.updated_at = now_bogota()
+        self.session.commit()
+        self.session.refresh(model)
+        return self._to_entity(model)
+
     def delete(self, user_id: int) -> None:
         from sqlalchemy.exc import IntegrityError
 
