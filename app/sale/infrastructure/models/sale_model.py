@@ -34,3 +34,4 @@ class SaleItemModel(Base):
     weight = Column(Numeric(12, 3), nullable=True)
     unit_price = Column(Numeric(14, 2), nullable=False)
     line_total = Column(Numeric(14, 2), nullable=False)
+    imei = Column(String(500), nullable=False, default="")

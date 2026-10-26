@@ -10,7 +10,7 @@ from user.domain.ports.password_reset_repository import PasswordReset, PasswordR
 from user.domain.ports.user_repository import UserRepository
 
 MAX_CODE_ATTEMPTS = 5
-INVALID_CODE = "El código no es válido o ya venció."
+INVALID_CODE = "El código no coincide con el que enviamos al correo."
 
 
 def _digits(value: str) -> str:
@@ -43,7 +43,9 @@ class RequestPasswordReset:
             send_password_reset_code(normalized, code)
         except Exception as exc:
             self.resets.invalidate_open(int(user.id))
-            raise MailError("No pudimos enviar el código. Intenta de nuevo en unos minutos.") from exc
+            raise MailError(
+                "Gmail rechazó el envío. En SMTP_PASSWORD usa una contraseña de aplicación de 16 letras de promethixia@gmail.com, no la contraseña de la cuenta."
+            ) from exc
 
 
 class VerifyPasswordReset:

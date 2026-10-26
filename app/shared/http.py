@@ -34,5 +34,5 @@ def handle_domain_error(exc: Exception) -> None:
     if isinstance(exc, ForbiddenError):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=exc.message) from exc
     if isinstance(exc, MailError):
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.message) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
     raise exc

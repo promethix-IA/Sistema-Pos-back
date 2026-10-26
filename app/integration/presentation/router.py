@@ -26,6 +26,9 @@ class PrinterIn(BaseModel):
 class TicketIn(BaseModel):
     storeName: str = Field(min_length=1, max_length=120)
     nitLine: str = Field(default="", max_length=200)
+    phone: str = Field(default="", max_length=40)
+    address: str = Field(default="", max_length=200)
+    city: str = Field(default="", max_length=120)
     footer: str = Field(default="", max_length=200)
     showDate: bool = True
     showClient: bool = True

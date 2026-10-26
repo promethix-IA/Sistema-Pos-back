@@ -3,6 +3,12 @@ from uuid import uuid4
 
 import jwt
 
+from shared.auth.cookies import (
+    attach_auth_cookies,
+    clear_auth_cookies,
+    enforce_csrf,
+    extract_access_token,
+)
 from shared.config.settings import settings
 from shared.exceptions import UnauthorizedError
 

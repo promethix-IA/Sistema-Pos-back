@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from db.session import get_db
 from integration.infrastructure.repositories.integration_repository import IntegrationRepository
-from shared.auth import create_access_token
+from shared.auth import attach_auth_cookies, clear_auth_cookies, create_access_token, enforce_csrf
+from shared.auth.cookies import ACCESS_COOKIE, CSRF_COOKIE
 from shared.exceptions import ConflictError, ForbiddenError, MailError, NotFoundError, RateLimitError, UnauthorizedError, ValidationError
 from shared.http import handle_domain_error
 from shared.mail import mail_configured
@@ -243,6 +244,7 @@ def reset_password(
 def login_user(
     payload: UserLoginSchema,
     request: Request,
+    response: Response,
     repository: UserRepository = Depends(get_user_repository),
 ) -> LoginResponseSchema:
     email = payload.email.lower().strip()
@@ -255,7 +257,16 @@ def login_user(
         raise
     login_limiter.reset(f"email:{email}")
     token = create_access_token(user_id=int(user.id), email=user.email, remember=payload.remember)
-    return LoginResponseSchema(access_token=token, user=UserResponseSchema.from_entity(user))
+    attach_auth_cookies(response, request, token)
+    return LoginResponseSchema(access_token=token, token_type="cookie", user=UserResponseSchema.from_entity(user))
+
+
+@router.post("/logout")
+def logout_user(request: Request, response: Response) -> dict:
+    if request.cookies.get(ACCESS_COOKIE) and request.cookies.get(CSRF_COOKIE):
+        enforce_csrf(request)
+    clear_auth_cookies(response, request)
+    return {"ok": True}
 
 
 @router.get("/me", response_model=UserResponseSchema)

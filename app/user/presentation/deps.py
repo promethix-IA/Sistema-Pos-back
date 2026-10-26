@@ -1,9 +1,9 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from db.session import get_db
-from shared.auth import decode_access_token
+from shared.auth import decode_access_token, enforce_csrf, extract_access_token
 from shared.exceptions import UnauthorizedError
 from shared.subscription import ensure_subscription_active
 from user.domain.entities.user import User
@@ -18,10 +18,14 @@ def get_user_repository(session: Session = Depends(get_db)) -> UserRepository:
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     repository: UserRepository = Depends(get_user_repository),
 ) -> User:
-    if credentials is None or credentials.scheme.lower() != "bearer" or not credentials.credentials:
+    enforce_csrf(request)
+    bearer = credentials.credentials if credentials and credentials.scheme.lower() == "bearer" else None
+    token = extract_access_token(request, bearer)
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -29,7 +33,7 @@ def get_current_user(
         )
 
     try:
-        payload = decode_access_token(credentials.credentials)
+        payload = decode_access_token(token)
         user_id = int(payload["sub"])
     except (UnauthorizedError, TypeError, ValueError, KeyError) as exc:
         message = getattr(exc, "message", "Token inválido")
