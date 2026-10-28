@@ -62,7 +62,7 @@ class InventoryRepository:
         self.session = session
         self.user_id = user_id
 
-    def all(self) -> list[dict]:
+    def all(self, limit: int = 80) -> list[dict]:
         stmt = (
             select(InventoryMovementModel)
             .where(InventoryMovementModel.user_id == self.user_id)
@@ -70,6 +70,7 @@ class InventoryRepository:
                 InventoryMovementModel.moved_on.desc(),
                 InventoryMovementModel.id.desc(),
             )
+            .limit(limit)
         )
         return [to_movement(item) for item in self.session.scalars(stmt).all()]
 

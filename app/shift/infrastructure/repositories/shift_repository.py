@@ -18,7 +18,9 @@ class ShiftRepository:
 
     def current(self) -> dict | None:
         shift = self._open_shift()
-        return self._to_shift(shift) if shift else None
+        if shift is None:
+            return None
+        return self.summary(shift.id)
 
     def list_shifts(self, limit: int = 30) -> list[dict]:
         rows = list(

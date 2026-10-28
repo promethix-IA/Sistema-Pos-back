@@ -346,9 +346,14 @@ class SaleRepository:
     def _to_sale_detail(self, sale: SaleModel) -> dict:
         items = self._items_for(sale.id)
         client_name = None
+        client_id_number = None
+        client_address = None
         if sale.client_id is not None:
             client = self.session.get(ClientModel, sale.client_id)
-            client_name = client.name if client is not None else None
+            if client is not None:
+                client_name = client.name
+                client_id_number = client.id_number or None
+                client_address = client.address or None
         mapped = []
         for item in items:
             sold = qty(item.qty)
@@ -374,6 +379,8 @@ class SaleRepository:
             "ticket": sale.ticket,
             "clientId": sale.client_id,
             "clientName": client_name,
+            "clientIdNumber": client_id_number,
+            "clientAddress": client_address,
             "shiftId": getattr(sale, "shift_id", None),
             "payment": sale.payment,
             "total": money(sale.total),
