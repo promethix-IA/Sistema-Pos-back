@@ -18,6 +18,7 @@ class SaleItemIn(BaseModel):
     productId: int
     qty: float = Field(gt=0)
     weight: float | None = None
+    imei: str = ""
 
 
 class PaymentAmountsIn(BaseModel):

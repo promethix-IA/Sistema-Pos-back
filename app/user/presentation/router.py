@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from db.session import get_db
@@ -118,12 +118,12 @@ def update_user_role(
         raise
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_user(
     user_id: int,
     repository: UserRepository = Depends(get_user_repository),
     _current_user: User = Depends(get_current_user),
-) -> None:
+) -> Response:
     try:
         if user_id == _current_user.id:
             raise ForbiddenError("No puedes eliminar tu propia cuenta.")
@@ -146,6 +146,7 @@ def delete_user(
     except (ConflictError, ForbiddenError, NotFoundError) as exc:
         handle_domain_error(exc)
         raise
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch("/{user_id}/subscription", response_model=UserResponseSchema)

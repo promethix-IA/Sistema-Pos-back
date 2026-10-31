@@ -1,3 +1,4 @@
+import re
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from uuid import uuid4
@@ -18,6 +19,61 @@ from shift.infrastructure.models.shift_model import CashShiftModel
 WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 PAYMENT_METHODS = {"efectivo", "tarjeta", "transferencia", "credito", "mixto"}
+PHONE_CATEGORY_HINTS = (
+    "celular",
+    "celulares",
+    "telefono",
+    "teléfono",
+    "telefonos",
+    "teléfonos",
+    "smartphone",
+    "smartphones",
+    "movil",
+    "móvil",
+    "moviles",
+    "móviles",
+)
+
+
+def product_requires_imei(category: str = "", name: str = "") -> bool:
+    blob = f"{category} {name}".casefold()
+    return any(hint in blob for hint in PHONE_CATEGORY_HINTS)
+
+
+def _digitos_imei(chunk: str) -> str:
+    digits = re.sub(r"\D", "", chunk or "")
+    if not digits:
+        return ""
+    if not 14 <= len(digits) <= 16:
+        raise ValidationError("El IMEI debe tener entre 14 y 16 dígitos.")
+    return digits
+
+
+def normalize_imeis(raw: str | None, units: int, product_name: str) -> str:
+    """Un IMEI obligatorio por unidad. El segundo IMEI de esa unidad es opcional."""
+    expected = max(1, units)
+    groups = [group.strip() for group in re.split(r"[;\n]+", raw or "") if group.strip()]
+    if len(groups) == 1 and expected > 1:
+        partes = [part.strip() for part in groups[0].split("/") if part.strip()]
+        if len(partes) == expected:
+            groups = partes
+    if len(groups) != expected:
+        if expected == 1:
+            raise ValidationError(f"Indica el IMEI de {product_name}.")
+        raise ValidationError(f"Indica {expected} IMEI de {product_name}, uno por cada unidad.")
+    saved: list[str] = []
+    for group in groups:
+        parts = [part.strip() for part in group.split("/") if part.strip()]
+        if not parts:
+            raise ValidationError(f"Indica el IMEI de {product_name}.")
+        if len(parts) > 2:
+            raise ValidationError(f"{product_name} solo admite dos IMEI por unidad.")
+        first = _digitos_imei(parts[0])
+        if not first:
+            raise ValidationError(f"Indica el IMEI de {product_name}.")
+        second = _digitos_imei(parts[1]) if len(parts) > 1 else ""
+        saved.append(f"{first} / {second}" if second else first)
+    return " ; ".join(saved)
 
 
 class SaleRepository:
@@ -66,7 +122,15 @@ class SaleRepository:
             weight = item.get("weight")
             if sale_mode == "granel" and weight is None:
                 weight = amount
-            line_totals.append((product, amount, weight, tracks, money(product.sell_price) * amount))
+            imei = ""
+            if product_requires_imei(product.category, product.name):
+                if sale_mode == "granel":
+                    raise ValidationError(f"{product.name} es un celular: véndelo por unidades, no a granel.")
+                units = int(amount)
+                if qty(amount) != units:
+                    raise ValidationError(f"La cantidad de {product.name} debe ser un número entero.")
+                imei = normalize_imeis(item.get("imei"), units, product.name)
+            line_totals.append((product, amount, weight, tracks, money(product.sell_price) * amount, imei))
 
         total = round(sum(line[4] for line in line_totals), 2)
         amounts = _payment_breakdown(payment, total, data)
@@ -97,7 +161,7 @@ class SaleRepository:
         sale.ticket = f"VTA-{sale.id:06d}"
 
         names = []
-        for product, amount, weight, tracks, line_total in line_totals:
+        for product, amount, weight, tracks, line_total, imei in line_totals:
             if tracks:
                 product.stock = max(0, qty(product.stock) - amount)
                 product.updated_at = current
@@ -120,6 +184,7 @@ class SaleRepository:
                     weight=weight,
                     unit_price=product.sell_price,
                     line_total=line_total,
+                    imei=imei,
                 )
             )
             names.append(f"{product.name} ×{amount:g}")
@@ -311,6 +376,7 @@ class SaleRepository:
                     "weight": qty(item.weight) if item.weight is not None else None,
                     "unitPrice": unit,
                     "lineTotal": money(unit * active),
+                    "imei": getattr(item, "imei", "") or "",
                 }
             )
         return {

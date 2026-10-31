@@ -171,6 +171,9 @@ def init_db():
                     "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS cancelled_qty NUMERIC(12, 3) NOT NULL DEFAULT 0"
                 ))
                 connection.execute(text(
+                    "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS imei VARCHAR(500) NOT NULL DEFAULT ''"
+                ))
+                connection.execute(text(
                     "ALTER TABLE sales ADD COLUMN IF NOT EXISTS shift_id INTEGER REFERENCES cash_shifts(id) ON DELETE SET NULL"
                 ))
                 connection.execute(text(
