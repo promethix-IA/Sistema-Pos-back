@@ -34,8 +34,20 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8443"
     )
     cors_origin_regex: str = r"https://([a-z0-9-]+--)?promethixiafront\.netlify\.app"
+    platform_admin_email: str = "admin@gmail.com"
     login_max_attempts: int = 5
     login_window_seconds: int = 900
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = "promethixia@gmail.com"
+    smtp_password: str = ""
+    smtp_from: str = "Promethixia <promethixia@gmail.com>"
+    password_reset_minutes: int = 10
+    desktop_installer_path: str = ""
+    desktop_installer_url_windows10_11: str = ""
+    desktop_installer_url_windows7_8: str = ""
+    license_private_key: str = ""
+    license_private_key_path: str = ""
 
     @field_validator("supabase_db_password")
     @classmethod
@@ -68,7 +80,11 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        if not self.is_production:
+            return origins
+        local = ("http://localhost", "http://127.0.0.1", "https://localhost", "https://127.0.0.1")
+        return [origin for origin in origins if not origin.startswith(local)]
 
     @property
     def cors_regex(self) -> str | None:

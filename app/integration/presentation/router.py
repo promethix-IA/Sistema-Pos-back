@@ -26,6 +26,9 @@ class PrinterIn(BaseModel):
 class TicketIn(BaseModel):
     storeName: str = Field(min_length=1, max_length=120)
     nitLine: str = Field(default="", max_length=200)
+    phone: str = Field(default="", max_length=40)
+    address: str = Field(default="", max_length=200)
+    city: str = Field(default="", max_length=120)
     footer: str = Field(default="", max_length=200)
     showDate: bool = True
     showClient: bool = True
@@ -58,7 +61,7 @@ def require_settings_editor(user: User = Depends(get_current_user)) -> User:
 @router.get("")
 def get_integrations(
     repository: IntegrationRepository = Depends(get_repository),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_settings_editor),
 ) -> dict:
     if is_platform_admin(user):
         handle_domain_error(ForbiddenError("La configuración es solo del administrador del negocio."))

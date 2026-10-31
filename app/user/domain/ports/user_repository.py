@@ -42,5 +42,24 @@ class UserRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def update_desktop_download(self, user_id: int, enabled: bool) -> User:
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_desktop_profile(
+        self,
+        user_id: int,
+        *,
+        enabled: bool | None = None,
+        channel: str | None = None,
+        updates_until: str | None = None,
+    ) -> User:
+        raise NotImplementedError
+
+    @abstractmethod
     def delete(self, user_id: int) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_password(self, user_id: int, password_hash: str) -> User:
         raise NotImplementedError

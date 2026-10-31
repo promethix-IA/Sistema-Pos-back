@@ -14,13 +14,14 @@ class CreditRepository:
 
     def list_debts(self, status: str | None = None) -> list[dict]:
         stmt = (
-            select(CreditDebtModel)
+            select(CreditDebtModel, ClientModel.name)
+            .outerjoin(ClientModel, ClientModel.id == CreditDebtModel.client_id)
             .where(CreditDebtModel.user_id == self.user_id)
             .order_by(CreditDebtModel.created_at.desc(), CreditDebtModel.id.desc())
         )
         if status:
             stmt = stmt.where(CreditDebtModel.status == status)
-        return [self._to_debt(row) for row in self.session.scalars(stmt).all()]
+        return [self._to_debt(debt, client_name=name or "") for debt, name in self.session.execute(stmt).all()]
 
     def get_debt(self, debt_id: int) -> dict:
         debt = self.session.get(CreditDebtModel, debt_id)
@@ -81,14 +82,16 @@ class CreditRepository:
         self.session.refresh(debt)
         return self._to_debt(debt, include_payments=True)
 
-    def _to_debt(self, debt: CreditDebtModel, include_payments: bool = False) -> dict:
-        client = self.session.get(ClientModel, debt.client_id)
+    def _to_debt(self, debt: CreditDebtModel, include_payments: bool = False, client_name: str | None = None) -> dict:
+        if client_name is None:
+            client = self.session.get(ClientModel, debt.client_id)
+            client_name = client.name if client else ""
         remaining = money(max(0, money(debt.total) - money(debt.paid)))
         payload = {
             "id": debt.id,
             "saleId": debt.sale_id,
             "clientId": debt.client_id,
-            "clientName": client.name if client else "",
+            "clientName": client_name or "",
             "ticket": debt.ticket,
             "total": money(debt.total),
             "paid": money(debt.paid),

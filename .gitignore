@@ -3,6 +3,7 @@
 !.env.example
 *.pem
 *.key
+instalador/
 credentials.json
 secrets.json
 

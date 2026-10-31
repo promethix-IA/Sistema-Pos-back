@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -28,8 +28,11 @@ def get_repository(
 
 
 @router.get("/movements")
-def list_movements(repository: InventoryRepository = Depends(get_repository)) -> list[dict]:
-    return repository.all()
+def list_movements(
+    repository: InventoryRepository = Depends(get_repository),
+    limit: int = Query(default=80, ge=1, le=500),
+) -> list[dict]:
+    return repository.all(limit=limit)
 
 
 @router.post("/adjustments", status_code=201)

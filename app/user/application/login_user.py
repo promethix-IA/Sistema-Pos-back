@@ -1,6 +1,6 @@
 from shared.exceptions import UnauthorizedError
 from shared.subscription import ensure_subscription_active
-from shared.utils.password import verify_password
+from shared.utils.password import hash_needs_upgrade, hash_password, verify_password
 from user.domain.entities.user import User
 from user.domain.ports.user_repository import UserRepository
 
@@ -15,5 +15,7 @@ class LoginUser:
             raise UnauthorizedError("Correo o contraseña incorrectos")
         if not user.is_active:
             raise UnauthorizedError("Usuario inactivo")
+        if user.id is not None and hash_needs_upgrade(user.password_hash):
+            user = self.repository.update_password(int(user.id), hash_password(password))
         ensure_subscription_active(user, self.repository)
         return user

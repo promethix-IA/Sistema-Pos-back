@@ -60,6 +60,9 @@ Públicos:
 | --- | --- | --- |
 | `GET` | `/health` | salud |
 | `POST` | `/users/login` | inicia sesión y devuelve JWT |
+| `POST` | `/users/password/forgot` | envía un código de 6 dígitos al correo |
+| `POST` | `/users/password/verify` | comprueba el código |
+| `POST` | `/users/password/reset` | cambia la contraseña si el código es válido |
 
 El resto exige `Authorization: Bearer`.
 
@@ -84,11 +87,13 @@ En producción (`APP_ENV` distinto de `development`) Swagger y OpenAPI se apagan
 - CORS solo con orígenes de `CORS_ORIGINS` (POS en `pos.promethixia.com`, Netlify y localhost).
 - Cabeceras HTTP (`X-Frame-Options`, `nosniff`, `Referrer-Policy`, etc.).
 - Tope de intentos de login (`LOGIN_MAX_ATTEMPTS` / `LOGIN_WINDOW_SECONDS`).
+- Recuperación de contraseña con código de un solo uso (10 minutos, 5 intentos).
 - `JWT_SECRET` de al menos 32 caracteres. No uses el valor de ejemplo.
+- Para enviar el código configura `SMTP_PASSWORD` (contraseña de aplicación de Gmail de `promethixia@gmail.com`). No subas esa clave.
 
 ## Arranque
 
-Copia `.env.example` a `.env` y completa `SUPABASE_DB_PASSWORD` y `JWT_SECRET`. No subas `.env`.
+Copia `.env.example` a `.env` y completa `SUPABASE_DB_PASSWORD`, `JWT_SECRET` y `SMTP_PASSWORD`. No subas `.env`.
 
 ```bash
 docker compose up --build

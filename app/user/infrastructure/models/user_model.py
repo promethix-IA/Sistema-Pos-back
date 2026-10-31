@@ -14,5 +14,8 @@ class UserModel(Base):
     role = Column(String(20), nullable=False, default="owner")
     plan = Column(String(20), nullable=False, default="")
     plan_expires_at = Column(DateTime(timezone=True), nullable=True)
+    desktop_download = Column(Boolean, nullable=False, default=False)
+    desktop_channel = Column(String(20), nullable=False, default="windows10-11")
+    desktop_updates_until = Column(String(10), nullable=False, default="")
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)

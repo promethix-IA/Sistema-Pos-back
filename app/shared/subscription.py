@@ -31,6 +31,25 @@ def billing_owner(user: User, repository: UserRepository) -> User:
     return user
 
 
+def desktop_download_enabled(user: User, repository: UserRepository) -> bool:
+    if user.role == "admin":
+        return False
+    if user.role not in {"owner", "administrador"}:
+        return False
+    return bool(billing_owner(user, repository).desktop_download)
+
+
+def desktop_profile(user: User, repository: UserRepository) -> dict:
+    from desktop.installer import normalize_channel
+
+    owner = billing_owner(user, repository)
+    return {
+        "desktop_download": desktop_download_enabled(user, repository),
+        "desktop_channel": normalize_channel(owner.desktop_channel),
+        "desktop_updates_until": owner.desktop_updates_until or "",
+    }
+
+
 def is_subscription_expired(user: User, now: datetime | None = None) -> bool:
     if user.role == "admin":
         return False

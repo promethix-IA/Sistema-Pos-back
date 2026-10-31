@@ -45,11 +45,20 @@ ip_limiter = SlidingWindowLimiter(
     window_seconds=settings.login_window_seconds,
 )
 
+reset_limiter = SlidingWindowLimiter(
+    max_attempts=5,
+    window_seconds=settings.login_window_seconds,
+)
+
+reset_ip_limiter = SlidingWindowLimiter(
+    max_attempts=20,
+    window_seconds=settings.login_window_seconds,
+)
+
 
 def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:64]
+    # Tras ProxyHeadersMiddleware, request.client es el IP real. No leemos
+    # X-Forwarded-For a mano: el cliente podría falsificarlo.
     if request.client and request.client.host:
-        return request.client.host
+        return request.client.host.strip()[:64]
     return "unknown"

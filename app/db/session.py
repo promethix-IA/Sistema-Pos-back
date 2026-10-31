@@ -4,6 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from db.database import Base, SessionLocal, engine
+from shared.config.settings import settings
 
 
 def get_db():
@@ -37,9 +38,12 @@ def _apply_tenant_columns(connection) -> None:
     connection.execute(text(
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'owner'"
     ))
-    connection.execute(text(
-        "UPDATE users SET role = 'admin' WHERE lower(email) LIKE 'admin@%'"
-    ))
+    platform_email = settings.platform_admin_email.strip().lower()
+    if platform_email:
+        connection.execute(
+            text("UPDATE users SET role = 'admin' WHERE lower(email) = :email"),
+            {"email": platform_email},
+        )
     connection.execute(text(
         """
         UPDATE users
@@ -122,6 +126,15 @@ def _apply_tenant_columns(connection) -> None:
     connection.execute(text(
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMPTZ"
     ))
+    connection.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS desktop_download BOOLEAN NOT NULL DEFAULT false"
+    ))
+    connection.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS desktop_channel VARCHAR(20) NOT NULL DEFAULT 'windows10-11'"
+    ))
+    connection.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS desktop_updates_until VARCHAR(10) NOT NULL DEFAULT ''"
+    ))
 
 
 
@@ -140,7 +153,10 @@ def init_db():
     from sale.infrastructure.models.sale_model import SaleItemModel, SaleModel  # noqa: F401
     from shift.infrastructure.models.shift_model import CashShiftModel  # noqa: F401
     from supplier.infrastructure.models.supplier_model import SupplierModel, SupplierOrderModel  # noqa: F401
+    from user.infrastructure.models.password_reset_model import PasswordResetModel  # noqa: F401
     from user.infrastructure.models.user_model import UserModel  # noqa: F401
+    from ledger.model import LedgerEntryModel  # noqa: F401
+    from license.infrastructure.models.license_model import DesktopLicenseModel  # noqa: F401
 
     for attempt in range(10):
         try:
@@ -172,6 +188,15 @@ def init_db():
                 ))
                 connection.execute(text(
                     "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS imei VARCHAR(500) NOT NULL DEFAULT ''"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS phone VARCHAR(40) NOT NULL DEFAULT ''"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS address VARCHAR(200) NOT NULL DEFAULT ''"
+                ))
+                connection.execute(text(
+                    "ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS city VARCHAR(120) NOT NULL DEFAULT ''"
                 ))
                 connection.execute(text(
                     "ALTER TABLE sales ADD COLUMN IF NOT EXISTS shift_id INTEGER REFERENCES cash_shifts(id) ON DELETE SET NULL"

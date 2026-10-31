@@ -36,5 +36,6 @@ class CreateUser:
             role=role,
             plan=plan,
             plan_expires_at=plan_expires_at,
+            desktop_download=False,
         )
         return self.repository.create(user)

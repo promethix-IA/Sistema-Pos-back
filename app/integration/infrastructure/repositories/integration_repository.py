@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,9 +18,33 @@ DEFAULT_PERIPHERALS = [
     ("dian", "DIAN Facturación Electrónica", True, "API REST"),
 ]
 
+def _split_extra_header(extra: str) -> tuple[str, str, str, str]:
+    phone = address = city = ""
+    rest: list[str] = []
+    for raw in (extra or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        low = line.casefold()
+        if not phone and re.match(r"^(celular|tel[eé]fono|tel\.?|whats?app)\b", low):
+            phone = re.sub(r"^(celular|tel[eé]fono|tel\.?|whats?app)\s*", "", line, flags=re.I).strip(" :.-")
+            continue
+        if not address and re.match(r"^(direcci[oó]n|dir\.?)\b", low):
+            address = re.sub(r"^(direcci[oó]n|dir\.?)\s*", "", line, flags=re.I).strip(" :.-") or line
+            continue
+        if not city:
+            city = line
+            continue
+        rest.append(line)
+    return phone, address, city, "\n".join(rest)
+
+
 DEFAULT_TICKET = {
     "storeName": "Mi negocio",
     "nitLine": "",
+    "phone": "",
+    "address": "",
+    "city": "",
     "footer": "¡Gracias por su compra!",
     "showDate": True,
     "showClient": True,
@@ -62,7 +88,8 @@ class IntegrationRepository:
             "dian": {
                 "nit": dian.nit,
                 "softwareId": dian.software_id,
-                "softwarePin": dian.software_pin,
+                "softwarePin": "",
+                "softwarePinSet": bool((dian.software_pin or "").strip()),
                 "environment": dian.environment,
             },
         }
@@ -107,6 +134,9 @@ class IntegrationRepository:
         ).first()
         ticket.store_name = (data.get("storeName") or DEFAULT_TICKET["storeName"]).strip() or DEFAULT_TICKET["storeName"]
         ticket.nit_line = (data.get("nitLine") or "").strip()
+        ticket.phone = (data.get("phone") or "").strip()
+        ticket.address = (data.get("address") or "").strip()
+        ticket.city = (data.get("city") or "").strip()
         ticket.footer = (data.get("footer") or "").strip()
         ticket.show_date = bool(data.get("showDate", True))
         ticket.show_client = bool(data.get("showClient", True))
@@ -124,7 +154,9 @@ class IntegrationRepository:
         ).first()
         dian.nit = data["nit"].strip()
         dian.software_id = data["softwareId"].strip()
-        dian.software_pin = data["softwarePin"]
+        pin = (data.get("softwarePin") or "").strip()
+        if pin:
+            dian.software_pin = pin
         dian.environment = data["environment"]
         self.session.commit()
         return self.get()
@@ -132,16 +164,26 @@ class IntegrationRepository:
     def _to_ticket(self, ticket: TicketSettingModel | None) -> dict:
         if ticket is None:
             return dict(DEFAULT_TICKET)
+        phone = getattr(ticket, "phone", "") or ""
+        address = getattr(ticket, "address", "") or ""
+        city = getattr(ticket, "city", "") or ""
+        extra = ticket.extra_header or ""
+        if not (phone or address or city):
+            parsed_phone, parsed_address, parsed_city, extra = _split_extra_header(extra)
+            phone, address, city = parsed_phone, parsed_address, parsed_city
         return {
             "storeName": ticket.store_name or DEFAULT_TICKET["storeName"],
             "nitLine": ticket.nit_line or "",
+            "phone": phone,
+            "address": address,
+            "city": city,
             "footer": ticket.footer or "",
             "showDate": bool(ticket.show_date),
             "showClient": bool(ticket.show_client),
             "showPayment": bool(ticket.show_payment),
             "showChange": bool(ticket.show_change),
             "showReprint": bool(ticket.show_reprint),
-            "extraHeader": ticket.extra_header or "",
+            "extraHeader": extra,
         }
 
     def ensure_defaults(self) -> None:
@@ -169,6 +211,9 @@ class IntegrationRepository:
                     user_id=self.user_id,
                     store_name=DEFAULT_TICKET["storeName"],
                     nit_line=DEFAULT_TICKET["nitLine"],
+                    phone="",
+                    address="",
+                    city="",
                     footer=DEFAULT_TICKET["footer"],
                     show_date=True,
                     show_client=True,
