@@ -53,12 +53,34 @@ def _rutas_candidatas() -> list[Path]:
     ]
 
 
+def _pem_desde_texto(raw: str) -> bytes:
+    texto = raw.strip().strip('"').strip("'").replace("\r\n", "\n")
+    if "BEGIN" not in texto:
+        compacto = "".join(texto.split())
+        try:
+            decodificado = base64.b64decode(compacto)
+        except ValueError:
+            decodificado = b""
+        if b"BEGIN" in decodificado:
+            return decodificado
+        texto = texto.replace("\\n", "\n")
+    else:
+        texto = texto.replace("\\n", "\n")
+    if "BEGIN" not in texto:
+        raise LicenseKeyError("LICENSE_PRIVATE_KEY no es una llave PEM válida.")
+    return texto.encode()
+
+
+def _en_render() -> bool:
+    return bool(os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID") or Path("/opt/render").exists())
+
+
 def _leer_pem() -> bytes:
     from shared.config.settings import settings
 
     raw = settings.license_private_key.strip()
     if raw:
-        return raw.replace("\\n", "\n").encode()
+        return _pem_desde_texto(raw)
     configured = settings.license_private_key_path.strip()
     if configured:
         path = Path(configured)
@@ -68,11 +90,17 @@ def _leer_pem() -> bytes:
     for path in _rutas_candidatas():
         if path.is_file():
             return path.read_bytes()
+    if _en_render():
+        raise LicenseKeyError(
+            "En Render falta la llave para firmar licencias. "
+            "En Environment agrega LICENSE_PRIVATE_KEY con el contenido de licencia-privada.pem "
+            "(líneas BEGIN y END incluidas) y vuelve a desplegar."
+        )
     destino = Path.home() / "Promethixia-POS-Privado" / "1-llave-secreta" / "licencia-privada.pem"
     raise LicenseKeyError(
         "No encuentro la llave privada de licencias. "
         f"Copia licencia-privada.pem a {destino} "
-        "o configura LICENSE_PRIVATE_KEY_PATH."
+        "o configura LICENSE_PRIVATE_KEY en el servidor."
     )
 
 
