@@ -101,8 +101,7 @@ def installer_filename(email: str, channel_id: str, path: Path | None) -> str:
 
 def installer_source(channel_id: str) -> tuple[Path | None, str]:
     wanted = normalize_channel(channel_id)
-    path = find_channel_installer(wanted)
-    return path, "" if path else installer_url(wanted)
+    return find_channel_installer(wanted), installer_url(wanted)
 
 
 def list_installers() -> list[dict]:

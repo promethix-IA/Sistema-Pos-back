@@ -45,7 +45,7 @@ def describe_installer(email: str, channel: str | None) -> dict:
         handle_domain_error(NotFoundError("Aún no está el instalador en el servidor."))
         raise
     return {
-        "local": path is not None,
+        "local": path is not None and not url,
         "url": url,
         "filename": filename,
         "path": path,
