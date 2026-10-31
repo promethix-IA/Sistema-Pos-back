@@ -4,7 +4,8 @@ import base64
 import json
 import os
 import re
-from datetime import datetime
+from calendar import monthrange
+from datetime import date, datetime
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
@@ -21,6 +22,11 @@ MCowBQYDK2VwAyEAMwSYyUQx/O8Mo4Rq69iSQ7PV1GPLI2QnPIec6n+vLl4=
 
 EQUIPO_RE = re.compile(r"^[0-9A-F]{4}(-[0-9A-F]{4}){3}$")
 FECHA_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+PERIODOS_LICENCIA = {
+    "mensual": 1,
+    "trimestral": 3,
+    "anual": 12,
+}
 
 
 class LicenseKeyError(Exception):
@@ -129,6 +135,46 @@ def normalizar_hasta(valor: str) -> str:
     except ValueError as exc:
         raise ValidationError("La fecha no es válida. Debe verse así: 2027-10-24") from exc
     return texto
+
+
+def normalizar_periodo(valor: str | None) -> str:
+    raw = re.sub(r"[\s_]+", "-", (valor or "").strip().lower())
+    aliases = {
+        "mensual": "mensual",
+        "mensualidad": "mensual",
+        "mes": "mensual",
+        "1": "mensual",
+        "1-mes": "mensual",
+        "trimestral": "trimestral",
+        "trimestre": "trimestral",
+        "tres-meses": "trimestral",
+        "3": "trimestral",
+        "3-meses": "trimestral",
+        "anual": "anual",
+        "anualidad": "anual",
+        "anio": "anual",
+        "año": "anual",
+        "12": "anual",
+        "1-ano": "anual",
+        "1-año": "anual",
+    }
+    periodo = aliases.get(raw)
+    if periodo not in PERIODOS_LICENCIA:
+        raise ValidationError("Elige mensualidad, tres meses o anualidad.")
+    return periodo
+
+
+def sumar_meses(inicio: date, meses: int) -> date:
+    month = inicio.month - 1 + meses
+    year = inicio.year + month // 12
+    month = month % 12 + 1
+    day = min(inicio.day, monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def hasta_por_periodo(periodo: str, desde: date | None = None) -> str:
+    clave = normalizar_periodo(periodo)
+    return sumar_meses(desde or now_bogota().date(), PERIODOS_LICENCIA[clave]).isoformat()
 
 
 def nombre_archivo(cliente: str, equipo: str | None) -> str:
