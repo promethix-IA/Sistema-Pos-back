@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = "Promethixia <promethixia@gmail.com>"
     password_reset_minutes: int = 10
+    desktop_installer_path: str = ""
+    license_private_key: str = ""
+    license_private_key_path: str = ""
 
     @field_validator("supabase_db_password")
     @classmethod

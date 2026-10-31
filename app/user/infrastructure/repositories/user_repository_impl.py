@@ -71,6 +71,34 @@ class UserRepositoryImpl(UserRepository):
         self.session.refresh(model)
         return self._to_entity(model)
 
+    def update_desktop_download(self, user_id: int, enabled: bool) -> User:
+        return self.update_desktop_profile(user_id, enabled=enabled)
+
+    def update_desktop_profile(
+        self,
+        user_id: int,
+        *,
+        enabled: bool | None = None,
+        channel: str | None = None,
+        updates_until: str | None = None,
+    ) -> User:
+        from shared.clock import now_bogota
+        from shared.exceptions import NotFoundError
+
+        model = self.session.get(UserModel, user_id)
+        if model is None:
+            raise NotFoundError("Usuario no encontrado")
+        if enabled is not None:
+            model.desktop_download = enabled
+        if channel is not None:
+            model.desktop_channel = channel
+        if updates_until is not None:
+            model.desktop_updates_until = updates_until
+        model.updated_at = now_bogota()
+        self.session.commit()
+        self.session.refresh(model)
+        return self._to_entity(model)
+
     def update_password(self, user_id: int, password_hash: str) -> User:
         from shared.clock import now_bogota
         from shared.exceptions import NotFoundError
@@ -119,6 +147,9 @@ class UserRepositoryImpl(UserRepository):
             role=model.role or "owner",
             plan=model.plan or "",
             plan_expires_at=model.plan_expires_at,
+            desktop_download=bool(model.desktop_download),
+            desktop_channel=model.desktop_channel or "windows10-11",
+            desktop_updates_until=model.desktop_updates_until or "",
         )
 
     def _to_model(self, user: User) -> UserModel:
@@ -130,6 +161,9 @@ class UserRepositoryImpl(UserRepository):
             role=user.role,
             plan=user.plan or "",
             plan_expires_at=user.plan_expires_at,
+            desktop_download=bool(user.desktop_download),
+            desktop_channel=user.desktop_channel or "windows10-11",
+            desktop_updates_until=user.desktop_updates_until or "",
             created_at=user.created_at,
             updated_at=user.updated_at,
         )

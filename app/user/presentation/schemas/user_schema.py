@@ -21,6 +21,12 @@ class UserSubscriptionPatch(BaseModel):
     action: str = Field(min_length=3, max_length=40)
 
 
+class UserDesktopPatch(BaseModel):
+    enabled: bool | None = None
+    channel: str | None = None
+    updates_until: str | None = None
+
+
 class UserLoginSchema(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
@@ -54,6 +60,9 @@ class UserResponseSchema(BaseModel):
     plan_label: str = "Libre"
     plan_expires_at: datetime | None = None
     subscription_status: str = "activo"
+    desktop_download: bool = False
+    desktop_channel: str = "windows10-11"
+    desktop_updates_until: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -69,6 +78,9 @@ class UserResponseSchema(BaseModel):
             plan_label=plan_label(user.plan),
             plan_expires_at=user.plan_expires_at,
             subscription_status=subscription_state(user),
+            desktop_download=bool(user.desktop_download),
+            desktop_channel=user.desktop_channel or "windows10-11",
+            desktop_updates_until=user.desktop_updates_until or "",
             created_at=user.created_at,
             updated_at=user.updated_at,
         )

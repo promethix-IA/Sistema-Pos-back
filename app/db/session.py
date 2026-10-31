@@ -122,6 +122,15 @@ def _apply_tenant_columns(connection) -> None:
     connection.execute(text(
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMPTZ"
     ))
+    connection.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS desktop_download BOOLEAN NOT NULL DEFAULT false"
+    ))
+    connection.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS desktop_channel VARCHAR(20) NOT NULL DEFAULT 'windows10-11'"
+    ))
+    connection.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS desktop_updates_until VARCHAR(10) NOT NULL DEFAULT ''"
+    ))
 
 
 
@@ -142,6 +151,8 @@ def init_db():
     from supplier.infrastructure.models.supplier_model import SupplierModel, SupplierOrderModel  # noqa: F401
     from user.infrastructure.models.password_reset_model import PasswordResetModel  # noqa: F401
     from user.infrastructure.models.user_model import UserModel  # noqa: F401
+    from ledger.model import LedgerEntryModel  # noqa: F401
+    from license.infrastructure.models.license_model import DesktopLicenseModel  # noqa: F401
 
     for attempt in range(10):
         try:

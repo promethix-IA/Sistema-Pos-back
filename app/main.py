@@ -6,6 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from category.presentation.router import router as category_router
 from client.presentation.router import router as client_router
 from credit.presentation.router import router as credit_router
+from desktop.presentation.router import router as desktop_router
+from ledger.router import router as ledger_router
+from license.presentation.router import router as license_router
 from inventory.presentation.router import router as inventory_router
 from db.session import init_db
 from integration.presentation.router import router as integration_router
@@ -45,6 +48,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "X-CSRF-Token"],
+    expose_headers=["Content-Disposition", "X-License-Filename"],
     max_age=600,
 )
 
@@ -59,6 +63,9 @@ app.include_router(sale_router, dependencies=protected)
 app.include_router(shift_router, dependencies=protected)
 app.include_router(credit_router, dependencies=protected)
 app.include_router(integration_router, dependencies=protected)
+app.include_router(desktop_router)
+app.include_router(license_router)
+app.include_router(ledger_router)
 
 
 @app.get("/", tags=["health"])

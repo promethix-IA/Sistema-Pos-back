@@ -14,3 +14,6 @@ class User:
     role: str = "owner"
     plan: str = ""
     plan_expires_at: datetime | None = None
+    desktop_download: bool = False
+    desktop_channel: str = "windows10-11"
+    desktop_updates_until: str = ""
