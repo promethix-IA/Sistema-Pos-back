@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from integration.infrastructure.repositories.integration_repository import IntegrationRepository
-from shared.auth import attach_auth_cookies, clear_auth_cookies, create_access_token, enforce_csrf
+from shared.auth import attach_auth_cookies, clear_auth_cookies, create_access_token, enforce_csrf, ensure_csrf_cookie
 from shared.auth.cookies import ACCESS_COOKIE, CSRF_COOKIE
 from shared.exceptions import ConflictError, ForbiddenError, MailError, NotFoundError, RateLimitError, UnauthorizedError, ValidationError
 from shared.http import handle_domain_error
@@ -31,6 +31,7 @@ from user.infrastructure.repositories.user_repository_impl import UserRepository
 from user.presentation.deps import get_current_user
 from user.presentation.schemas.user_schema import (
     LoginResponseSchema,
+    MeResponseSchema,
     PasswordCodeSchema,
     PasswordEmailSchema,
     PasswordResetSchema,
@@ -297,8 +298,13 @@ def login_user(
         raise
     login_limiter.reset(f"email:{email}")
     token = create_access_token(user_id=int(user.id), email=user.email, remember=payload.remember)
-    attach_auth_cookies(response, request, token)
-    return LoginResponseSchema(access_token=token, token_type="cookie", user=user_payload(user, repository))
+    csrf = attach_auth_cookies(response, request, token)
+    return LoginResponseSchema(
+        access_token=token,
+        token_type="cookie",
+        csrf_token=csrf,
+        user=user_payload(user, repository),
+    )
 
 
 @router.post("/logout")
@@ -309,12 +315,18 @@ def logout_user(request: Request, response: Response) -> dict:
     return {"ok": True}
 
 
-@router.get("/me", response_model=UserResponseSchema)
+@router.get("/me", response_model=MeResponseSchema)
 def get_me(
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     repository: UserRepository = Depends(get_user_repository),
-) -> UserResponseSchema:
-    return user_payload(current_user, repository)
+) -> MeResponseSchema:
+    payload = user_payload(current_user, repository)
+    return MeResponseSchema(
+        **payload.model_dump(),
+        csrf_token=ensure_csrf_cookie(response, request),
+    )
 
 
 @router.patch("/me/desktop", response_model=UserResponseSchema)

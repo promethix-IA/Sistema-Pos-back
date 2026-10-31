@@ -89,4 +89,9 @@ class UserResponseSchema(BaseModel):
 class LoginResponseSchema(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    csrf_token: str = ""
     user: UserResponseSchema
+
+
+class MeResponseSchema(UserResponseSchema):
+    csrf_token: str = ""

@@ -37,6 +37,15 @@ def attach_auth_cookies(response: Response, request: Request, token: str) -> str
     return csrf
 
 
+def ensure_csrf_cookie(response: Response, request: Request) -> str:
+    existing = (request.cookies.get(CSRF_COOKIE) or "").strip()
+    if existing:
+        return existing
+    csrf = secrets.token_urlsafe(32)
+    response.set_cookie(CSRF_COOKIE, csrf, httponly=False, **_cookie_base(request))
+    return csrf
+
+
 def clear_auth_cookies(response: Response, request: Request) -> None:
     base = _cookie_base(request)
     response.delete_cookie(ACCESS_COOKIE, **base)
