@@ -1,8 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
-from zoneinfo import ZoneInfo
 
-BOGOTA = ZoneInfo("America/Bogota")
+try:
+    from zoneinfo import ZoneInfo
+
+    BOGOTA = ZoneInfo("America/Bogota")
+except Exception:
+    # El programa empaquetado a veces no encuentra la base de zonas horarias.
+    # Bogotá no tiene horario de verano: UTC−5 es el mismo reloj.
+    BOGOTA = timezone(timedelta(hours=-5))
 
 
 def now_bogota() -> datetime:
