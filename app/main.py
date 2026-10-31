@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from category.presentation.router import router as category_router
 from client.presentation.router import router as client_router
@@ -51,6 +52,7 @@ app.add_middleware(
     expose_headers=["Content-Disposition", "X-License-Filename"],
     max_age=600,
 )
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.include_router(user_router)
 protected = [Depends(get_current_user)]

@@ -57,9 +57,8 @@ reset_ip_limiter = SlidingWindowLimiter(
 
 
 def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:64]
+    # Tras ProxyHeadersMiddleware, request.client es el IP real. No leemos
+    # X-Forwarded-For a mano: el cliente podría falsificarlo.
     if request.client and request.client.host:
-        return request.client.host
+        return request.client.host.strip()[:64]
     return "unknown"

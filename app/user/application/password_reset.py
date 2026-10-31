@@ -43,9 +43,7 @@ class RequestPasswordReset:
             send_password_reset_code(normalized, code)
         except Exception as exc:
             self.resets.invalidate_open(int(user.id))
-            raise MailError(
-                "Gmail rechazó el envío. En SMTP_PASSWORD usa una contraseña de aplicación de 16 letras de promethixia@gmail.com, no la contraseña de la cuenta."
-            ) from exc
+            raise MailError("No pudimos enviar el código. Intenta más tarde.") from exc
 
 
 class VerifyPasswordReset:

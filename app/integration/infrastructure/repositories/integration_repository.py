@@ -88,7 +88,8 @@ class IntegrationRepository:
             "dian": {
                 "nit": dian.nit,
                 "softwareId": dian.software_id,
-                "softwarePin": dian.software_pin,
+                "softwarePin": "",
+                "softwarePinSet": bool((dian.software_pin or "").strip()),
                 "environment": dian.environment,
             },
         }
@@ -153,7 +154,9 @@ class IntegrationRepository:
         ).first()
         dian.nit = data["nit"].strip()
         dian.software_id = data["softwareId"].strip()
-        dian.software_pin = data["softwarePin"]
+        pin = (data.get("softwarePin") or "").strip()
+        if pin:
+            dian.software_pin = pin
         dian.environment = data["environment"]
         self.session.commit()
         return self.get()

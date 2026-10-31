@@ -333,9 +333,9 @@ def login_user(
         raise
     login_limiter.reset(f"email:{email}")
     token = create_access_token(user_id=int(user.id), email=user.email, remember=payload.remember)
-    csrf = attach_auth_cookies(response, request, token)
+    csrf = attach_auth_cookies(response, request, token, remember=payload.remember)
     return LoginResponseSchema(
-        access_token=token,
+        access_token="",
         token_type="cookie",
         csrf_token=csrf,
         user=user_payload(user, repository),

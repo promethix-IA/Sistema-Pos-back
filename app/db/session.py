@@ -4,6 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from db.database import Base, SessionLocal, engine
+from shared.config.settings import settings
 
 
 def get_db():
@@ -37,9 +38,12 @@ def _apply_tenant_columns(connection) -> None:
     connection.execute(text(
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'owner'"
     ))
-    connection.execute(text(
-        "UPDATE users SET role = 'admin' WHERE lower(email) LIKE 'admin@%'"
-    ))
+    platform_email = settings.platform_admin_email.strip().lower()
+    if platform_email:
+        connection.execute(
+            text("UPDATE users SET role = 'admin' WHERE lower(email) = :email"),
+            {"email": platform_email},
+        )
     connection.execute(text(
         """
         UPDATE users

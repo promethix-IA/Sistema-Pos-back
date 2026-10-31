@@ -34,6 +34,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8443"
     )
     cors_origin_regex: str = r"https://([a-z0-9-]+--)?promethixiafront\.netlify\.app"
+    platform_admin_email: str = "admin@gmail.com"
     login_max_attempts: int = 5
     login_window_seconds: int = 900
     smtp_host: str = "smtp.gmail.com"
@@ -79,7 +80,11 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        if not self.is_production:
+            return origins
+        local = ("http://localhost", "http://127.0.0.1", "https://localhost", "https://127.0.0.1")
+        return [origin for origin in origins if not origin.startswith(local)]
 
     @property
     def cors_regex(self) -> str | None:

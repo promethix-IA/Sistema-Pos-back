@@ -85,22 +85,18 @@ def _leer_pem() -> bytes:
     if configured:
         path = Path(configured)
         if not path.is_file():
-            raise LicenseKeyError(f"No encuentro la llave privada en {path}.")
+            raise LicenseKeyError("No encuentro la llave privada de licencias.")
         return path.read_bytes()
     for path in _rutas_candidatas():
         if path.is_file():
             return path.read_bytes()
     if _en_render():
         raise LicenseKeyError(
-            "En Render falta la llave para firmar licencias. "
-            "En Environment agrega LICENSE_PRIVATE_KEY con el contenido de licencia-privada.pem "
-            "(líneas BEGIN y END incluidas) y vuelve a desplegar."
+            "En Render falta LICENSE_PRIVATE_KEY. Configúrala en Environment y vuelve a desplegar."
         )
-    destino = Path.home() / "Promethixia-POS-Privado" / "1-llave-secreta" / "licencia-privada.pem"
     raise LicenseKeyError(
         "No encuentro la llave privada de licencias. "
-        f"Copia licencia-privada.pem a {destino} "
-        "o configura LICENSE_PRIVATE_KEY en el servidor."
+        "Configura LICENSE_PRIVATE_KEY o LICENSE_PRIVATE_KEY_PATH en el servidor."
     )
 
 
