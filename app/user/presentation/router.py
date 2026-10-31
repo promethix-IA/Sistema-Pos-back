@@ -61,6 +61,41 @@ def get_password_reset_repository(session: Session = Depends(get_db)) -> Passwor
     return PasswordResetRepositoryImpl(session)
 
 
+@router.get("/me", response_model=MeResponseSchema)
+def get_me(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    repository: UserRepository = Depends(get_user_repository),
+) -> MeResponseSchema:
+    payload = user_payload(current_user, repository)
+    return MeResponseSchema(
+        **payload.model_dump(),
+        csrf_token=ensure_csrf_cookie(response, request),
+    )
+
+
+@router.patch("/me/desktop", response_model=UserResponseSchema)
+def set_own_desktop_profile(
+    payload: UserDesktopPatch,
+    current_user: User = Depends(get_current_user),
+    repository: UserRepository = Depends(get_user_repository),
+) -> UserResponseSchema:
+    try:
+        if is_platform_admin(current_user) or not can_edit_business_settings(current_user):
+            raise ForbiddenError("No tienes permiso para cambiar el perfil del POS.")
+        if not payload.channel:
+            raise ValidationError("Elige Windows 10/11 o Windows 7/8.")
+        owner = billing_owner(current_user, repository)
+        if owner.id is None:
+            raise ForbiddenError("No encontramos el negocio de esta cuenta.")
+        updated = repository.update_desktop_profile(int(owner.id), channel=normalize_channel(payload.channel))
+        return user_payload(updated if current_user.role == "owner" else current_user, repository)
+    except (ForbiddenError, ValidationError) as exc:
+        handle_domain_error(exc)
+        raise
+
+
 @router.get("", response_model=list[UserResponseSchema])
 def list_users(
     repository: UserRepository = Depends(get_user_repository),
@@ -311,38 +346,3 @@ def login_user(
 def logout_user(request: Request, response: Response) -> dict:
     clear_auth_cookies(response, request)
     return {"ok": True}
-
-
-@router.get("/me", response_model=MeResponseSchema)
-def get_me(
-    request: Request,
-    response: Response,
-    current_user: User = Depends(get_current_user),
-    repository: UserRepository = Depends(get_user_repository),
-) -> MeResponseSchema:
-    payload = user_payload(current_user, repository)
-    return MeResponseSchema(
-        **payload.model_dump(),
-        csrf_token=ensure_csrf_cookie(response, request),
-    )
-
-
-@router.patch("/me/desktop", response_model=UserResponseSchema)
-def set_own_desktop_profile(
-    payload: UserDesktopPatch,
-    current_user: User = Depends(get_current_user),
-    repository: UserRepository = Depends(get_user_repository),
-) -> UserResponseSchema:
-    try:
-        if is_platform_admin(current_user) or not can_edit_business_settings(current_user):
-            raise ForbiddenError("No tienes permiso para cambiar el perfil del POS.")
-        if not payload.channel:
-            raise ValidationError("Elige Windows 10/11 o Windows 7/8.")
-        owner = billing_owner(current_user, repository)
-        if owner.id is None:
-            raise ForbiddenError("No encontramos el negocio de esta cuenta.")
-        updated = repository.update_desktop_profile(int(owner.id), channel=normalize_channel(payload.channel))
-        return user_payload(updated if current_user.role == "owner" else current_user, repository)
-    except (ForbiddenError, ValidationError) as exc:
-        handle_domain_error(exc)
-        raise

@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     smtp_from: str = "Promethixia <promethixia@gmail.com>"
     password_reset_minutes: int = 10
     desktop_installer_path: str = ""
+    desktop_installer_url_windows10_11: str = ""
+    desktop_installer_url_windows7_8: str = ""
     license_private_key: str = ""
     license_private_key_path: str = ""
 
