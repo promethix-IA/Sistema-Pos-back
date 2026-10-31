@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from integration.infrastructure.repositories.integration_repository import IntegrationRepository
-from shared.auth import attach_auth_cookies, clear_auth_cookies, create_access_token, enforce_csrf, ensure_csrf_cookie
+from shared.auth import attach_auth_cookies, clear_auth_cookies, create_access_token, ensure_csrf_cookie
 from shared.auth.cookies import ACCESS_COOKIE, CSRF_COOKIE
 from shared.exceptions import ConflictError, ForbiddenError, MailError, NotFoundError, RateLimitError, UnauthorizedError, ValidationError
 from shared.http import handle_domain_error
@@ -309,8 +309,6 @@ def login_user(
 
 @router.post("/logout")
 def logout_user(request: Request, response: Response) -> dict:
-    if request.cookies.get(ACCESS_COOKIE) and request.cookies.get(CSRF_COOKIE):
-        enforce_csrf(request)
     clear_auth_cookies(response, request)
     return {"ok": True}
 

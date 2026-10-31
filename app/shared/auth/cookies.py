@@ -1,4 +1,5 @@
 import hmac
+import re
 import secrets
 
 from fastapi import HTTPException, Request, Response, status
@@ -47,9 +48,13 @@ def ensure_csrf_cookie(response: Response, request: Request) -> str:
 
 
 def clear_auth_cookies(response: Response, request: Request) -> None:
-    base = _cookie_base(request)
-    response.delete_cookie(ACCESS_COOKIE, **base)
-    response.delete_cookie(CSRF_COOKIE, **base)
+    # Hay que borrar con las mismas banderas con las que se creó; si no, el
+    # navegador deja la cookie y al recargar vuelve a entrar.
+    for samesite in ("none", "lax"):
+        for secure in (True, False):
+            kwargs = {"path": "/", "secure": secure, "samesite": samesite}
+            response.delete_cookie(ACCESS_COOKIE, **kwargs)
+            response.delete_cookie(CSRF_COOKIE, **kwargs)
 
 
 def extract_access_token(request: Request, bearer: str | None) -> str | None:
@@ -59,6 +64,16 @@ def extract_access_token(request: Request, bearer: str | None) -> str | None:
     return cookie.strip() if cookie else None
 
 
+def origin_allowed(origin: str) -> bool:
+    value = (origin or "").strip()
+    if not value:
+        return False
+    if value in settings.cors_origin_list:
+        return True
+    pattern = settings.cors_regex
+    return bool(pattern and re.fullmatch(pattern, value))
+
+
 def enforce_csrf(request: Request) -> None:
     if request.method.upper() in SAFE_METHODS:
         return
@@ -66,6 +81,10 @@ def enforce_csrf(request: Request) -> None:
     if authorization.lower().startswith("bearer "):
         return
     if not request.cookies.get(ACCESS_COOKIE):
+        return
+    # Front (Netlify) y API (Render) son dominios distintos: el JS no puede leer
+    # pos_csrf. Si el Origin es el de Promethixia, el navegador ya bloqueó a otros sitios.
+    if origin_allowed(request.headers.get("origin", "")):
         return
     cookie_token = request.cookies.get(CSRF_COOKIE, "")
     header_token = request.headers.get(CSRF_HEADER, "")
