@@ -36,6 +36,7 @@ class TicketIn(BaseModel):
     showChange: bool = True
     showReprint: bool = True
     extraHeader: str = ""
+    fontSize: int = Field(default=12, ge=10, le=16)
 
 
 class DianIn(BaseModel):

@@ -42,6 +42,7 @@ class TicketSettingModel(Base):
     show_change = Column(Boolean, nullable=False, default=True)
     show_reprint = Column(Boolean, nullable=False, default=True)
     extra_header = Column(Text, nullable=False, default="")
+    font_size = Column(Integer, nullable=False, default=12)
 
 
 class DianSettingModel(Base):

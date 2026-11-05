@@ -52,7 +52,16 @@ DEFAULT_TICKET = {
     "showChange": True,
     "showReprint": True,
     "extraHeader": "",
+    "fontSize": 12,
 }
+
+
+def _font_size(value) -> int:
+    try:
+        size = int(value)
+    except (TypeError, ValueError):
+        return 12
+    return size if size in (10, 12, 14, 16) else 12
 
 
 class IntegrationRepository:
@@ -144,6 +153,7 @@ class IntegrationRepository:
         ticket.show_change = bool(data.get("showChange", True))
         ticket.show_reprint = bool(data.get("showReprint", True))
         ticket.extra_header = (data.get("extraHeader") or "").strip()
+        ticket.font_size = _font_size(data.get("fontSize", DEFAULT_TICKET["fontSize"]))
         self.session.commit()
         return self.get()
 
@@ -184,6 +194,7 @@ class IntegrationRepository:
             "showChange": bool(ticket.show_change),
             "showReprint": bool(ticket.show_reprint),
             "extraHeader": extra,
+            "fontSize": _font_size(getattr(ticket, "font_size", DEFAULT_TICKET["fontSize"])),
         }
 
     def ensure_defaults(self) -> None:
@@ -221,6 +232,7 @@ class IntegrationRepository:
                     show_change=True,
                     show_reprint=True,
                     extra_header="",
+                    font_size=12,
                 )
             )
         if self.session.scalar(select(DianSettingModel.id).where(DianSettingModel.user_id == self.user_id)) is None:

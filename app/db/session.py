@@ -199,6 +199,9 @@ def init_db():
                     "ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS city VARCHAR(120) NOT NULL DEFAULT ''"
                 ))
                 connection.execute(text(
+                    "ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS font_size INTEGER NOT NULL DEFAULT 12"
+                ))
+                connection.execute(text(
                     "ALTER TABLE sales ADD COLUMN IF NOT EXISTS shift_id INTEGER REFERENCES cash_shifts(id) ON DELETE SET NULL"
                 ))
                 connection.execute(text(
